@@ -1,6 +1,8 @@
 # Maintainers and governance
 
 Repository owner and initial code owner: [@acuiuli](https://github.com/acuiuli).
+Keep the repository **private until a working MVP has been validated**. A successful
+cross-build or simulator test is insufficient to change its visibility.
 Contributors retain copyright in their work. The maintainer reviews design boundaries,
 DCO checks, tests, dependency changes, reports, releases and security coordination.
 Changes should be reviewable as a pull request; require CI and code-owner review in

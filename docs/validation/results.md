@@ -45,6 +45,13 @@ TRV firmware images were introduced. SDK warnings about duplicate Kconfig defini
 and unused/uninitialized values in unused vendor clusters were observed; they did not
 fail the builds. They are upstream warnings, not hardware qualification results.
 
-Public repository visibility, protected branches and private vulnerability reporting
-settings were not changed by this local implementation. The GitHub workflows are written
-and their commands were exercised locally; hosted GitHub Actions have not run yet.
+The foundation is pushed to GitHub and the repository is **private**. Public launch
+requires a working MVP; this software-only foundation does not meet that gate. Workflow
+defaults are read-only and workflows cannot approve pull requests. Hosted verification
+is tracked by the [CI workflow](https://github.com/acuiuli/shelly-blu-matter-bridge/actions/workflows/ci.yml).
+Consult the run for the revision being used; the local measurements above are separate.
+
+Branch protection is unavailable on the current private-repository tier (GitHub returned
+403), and private vulnerability reporting is unavailable for this private repository
+(404). Configure and verify those controls at the eventual public launch. No paid plan
+change is required or authorized by this foundation.

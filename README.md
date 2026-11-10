@@ -5,6 +5,9 @@ Thread upstream, BLE downstream**, on the Espressif ESP32-S3 + ESP32-H2 Main Boa
 The first deliverable is a foundation and simulator. **Full replacement feasibility
 has not been established. Real TRV communication is not implemented.**
 
+**Publication gate:** keep this repository private until a working MVP has been
+validated. The current software-only foundation does not pass that gate.
+
 > This project is independent and unaffiliated with Shelly. It is not presented as
 > certified by Shelly, the Connectivity Standards Alliance, or any other body.
 > Validate it before production use. It is provided without warranty. To the extent
