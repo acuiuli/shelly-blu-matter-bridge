@@ -1,0 +1,6 @@
+{
+  "name": "Shelly BLU bridge (experimental)",
+  "image": "espressif/esp-matter@sha256:cfb09a0132bb81cdb3935ac0351f86cb62d580ad02822220298cdcb2b923dc7e",
+  "workspaceFolder": "/workspaces/shelly-blu-matter-bridge",
+  "remoteUser": "root"
+}

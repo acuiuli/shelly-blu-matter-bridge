@@ -1,0 +1,16 @@
+name: Validation result
+description: Record a reproducible acceptance test
+body:
+  - type: input
+    id: gate
+    attributes:
+      label: Gate or capability matrix row
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Method, versions, measurements and outcome
+      description: Use docs/validation/report-template.md; do not attach unredacted logs.
+    validations:
+      required: true

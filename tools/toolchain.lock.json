@@ -1,0 +1,10 @@
+{
+  "image": "espressif/esp-matter@sha256:cfb09a0132bb81cdb3935ac0351f86cb62d580ad02822220298cdcb2b923dc7e",
+  "tag_at_resolution": "release-v1.5_idf_v5.5.5",
+  "resolved_on": "2026-11-10",
+  "esp_idf": "b774170ff46c393eeb5e495ea37936038d3f4f4f",
+  "esp_matter": "256368558724d371737ac0437972207a917f029a",
+  "connectedhomeip": "9c2a63634e880b92e29b25a49543b70a4baf1572",
+  "openthread": "b678a4f63b6f9397d1a0fa8f31e5b8e0271a4d00",
+  "nimble": "685675c0128deafdd201c9eb82e61d227364646c"
+}

@@ -1,0 +1,16 @@
+name: Design or capability investigation
+description: Propose a standard mapping or a scoped contribution
+body:
+  - type: textarea
+    id: proposal
+    attributes:
+      label: User need, proposed behavior and standard mapping
+      description: Identify the capability matrix row and any unresolved semantics.
+    validations:
+      required: true
+  - type: textarea
+    id: test
+    attributes:
+      label: Acceptance evidence needed
+    validations:
+      required: true

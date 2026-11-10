@@ -1,0 +1,25 @@
+name: Bug report
+description: Report a reproducible prototype failure
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "For vulnerabilities use Security → Report a vulnerability. Remove keys, PINs, datasets and bonding material."
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions and environment
+      description: Commit, board revision, flash, SDK digest, HA/Matter Server/TRV versions; simulator or hardware.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps, expected behavior and observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Requested vs reported state, timeouts, Thread role and relevant logs.

@@ -1,0 +1,16 @@
+.private/
+.cache/
+build/
+**/build/
+**/managed_components/
+**/sdkconfig
+**/sdkconfig.old
+__pycache__/
+.env
+secrets/
+*.pem
+*.key
+*.nvs
+*.bin
+*.map
+*.elf

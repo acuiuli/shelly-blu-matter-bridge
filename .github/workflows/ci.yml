@@ -1,0 +1,58 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  repository:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: python3 tools/check_repository.py
+      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+  dco:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/check_dco.py
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+  prototype:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Make space for the official SDK image on the disposable runner
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+      - run: ./tools/dev.sh python3 tools/check_toolchain.py
+      - run: ./tools/dev.sh bash tools/format.sh --check
+      - name: Host behavior tests
+        run: ./tools/dev.sh bash -c 'cmake -S . -B build/host -G Ninja && cmake --build build/host && ctest --test-dir build/host --output-on-failure'
+      - name: ESP32-S3 firmware compilation
+        run: ./tools/dev.sh idf.py -C firmware set-target esp32s3 build
+      - run: ./tools/dev.sh python3 tools/check_firmware_config.py
+      - name: Matched H2 RCP compilation
+        run: ./tools/dev.sh bash tools/build_rcp.sh
+      - name: Dependency lock is reproducible
+        run: git diff --exit-code -- firmware/dependencies.lock
+      - name: Dependency and notice inventory (local artifact only)
+        run: ./tools/dev.sh python3 tools/dependency_inventory.py build/dependency-review
+      - name: Retain dependency review evidence (contains no firmware images)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dependency-review
+          path: build/dependency-review
+          retention-days: 7
