@@ -25,8 +25,9 @@ Acceptance: import the image on 9.3.0, discover it in HA, install, reboot and ve
 new S3 version, unchanged H2 checksum and retained endpoint ids/fabrics/bonds. Interrupt
 download and installation separately; boot a deliberately unhealthy test image and
 verify the previous application returns. In the prototype the image is marked valid
-only after model and Thread initialization succeeds; that check alone does not prove
-network health. Qualify the health policy on hardware before relying on rollback.
+only after model and Thread initialization, a complete state publication and BLE host
+synchronization succeed. That boot check alone does not prove network or valve health.
+Qualify the health policy on hardware before relying on rollback.
 
 ## TRV vendor firmware
 

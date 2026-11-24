@@ -17,7 +17,9 @@ Flash only after the two serial devices have been identified without ambiguity.
    during upgrades. Review the development attestation limitations in that guide.
 3. Run `onboarding` on the local USB console to explicitly display the private development
    commissioning code. Keep that output out of shared logs. In the Home Assistant companion
-   app, add a Matter device using that code. Use the existing preferred Thread network.
+   app, open Settings > Connectivity > Matter > Add device, choose a new device and
+   enter the code manually. See the [current HA steps](https://www.home-assistant.io/integrations/matter/#adding-a-matter-device-to-home-assistant)
+   for Android/iOS options and test-accessory prompts. Use the existing preferred Thread network.
    Do not create a second dataset/network to make an attach failure disappear.
 4. Check `diag`: router eligibility must be true. OpenThread role values are 0 disabled,
    1 detached, 2 child, 3 router, 4 leader. A child may be a router-eligible end device.
@@ -25,7 +27,8 @@ Flash only after the two serial devices have been identified without ambiguity.
 5. Verify four climates, four percentage-capable valves, battery readings and grouping.
    Capture the Descriptor tree and sanitized diagnostics in a validation report.
 6. Verify BLE central/scan operation after commissioning and during Thread traffic.
-   The prototype does not yet perform this scan; this is an explicit transport gate.
+   Use `ble_scan 10` and `ble_scan status` to record passive advertisements. GATT,
+   bonding and continued scanning after commissioning remain explicit transport gates.
 
 No Thread dataset or bonding secret should be entered into an issue or committed.
 The normal path provisions Thread credentials over Matter commissioning. USB is the

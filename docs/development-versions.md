@@ -48,3 +48,8 @@ ESP-Matter 1.6.1 needs one const-correctness compatibility patch under IDF 6.1.1
 `esp_matter_icd_configuration.cpp` declares its constant log tag as `const char *`.
 The patch carries a modification notice, is checked by hash, and is included in the
 notice inventory. No SDK warnings are globally suppressed to accommodate this change.
+
+A second pinned patch adds the missing 100-percent upper bound to connectedhomeip's
+native Valve Configuration and Control validation. It covers Open target levels and
+DefaultOpenLevel writes; minimum and level-step rules remain in the upstream handler.
+Both patches are included in the dependency inventory with modification notices.

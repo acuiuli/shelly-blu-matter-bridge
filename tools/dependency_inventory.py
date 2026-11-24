@@ -107,7 +107,7 @@ report = {"schema": 1, "toolchain": lock, "sdks": sdks, "registry_components": c
           "application": {"path": "firmware/build/shelly_blu_bridge.bin",
                           "sha256": sha(Path("firmware/build/shelly_blu_bridge.bin"))},
           "build_components": project["build_components"], "loaded_archives": archives,
-          "license_files": licenses, "modifications": "Official Matter container extended with pinned ESP-IDF source/tool and Python environment updates; ESP-Matter const log-tag patch recorded in toolchain lock",
+          "license_files": licenses, "modifications": "Official Matter container extended with pinned ESP-IDF source/tool and Python environment updates; ESP-Matter const log-tag and connectedhomeip valve-range patches recorded in toolchain lock",
           "license_review_complete": False,
           "remaining_review": ["Verify all linked transitive components and embedded headers against notices",
                                "Review distributed binary-library and compiler runtime license obligations",

@@ -1,0 +1,15 @@
+diff --git a/src/app/clusters/valve-configuration-and-control-server/ValveConfigurationAndControlCluster.cpp b/src/app/clusters/valve-configuration-and-control-server/ValveConfigurationAndControlCluster.cpp
+--- a/src/app/clusters/valve-configuration-and-control-server/ValveConfigurationAndControlCluster.cpp
++++ b/src/app/clusters/valve-configuration-and-control-server/ValveConfigurationAndControlCluster.cpp
+@@ -481,6 +481,11 @@
+ // the value of TargetLevel should be 0, 100 or a multiple of LevelStep.
+ bool ValveConfigurationAndControlCluster::ValueCompliesWithLevelStep(const uint8_t value) const
+ {
++    // Modified by Shelly BLU Matter Bridge: reject percentages above the Matter maximum.
++    if (value > kMaxLevelValuePercent)
++    {
++        return false;
++    }
+     if (!mOptionalAttributeSet.IsSet(Attributes::LevelStep::Id))
+     {
+         return true;

@@ -36,11 +36,11 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 | Capability | Planned interface | Implemented | Validated |
 | --- | --- | --- | --- |
 | Temperature, setpoint, Off/Heat | Thermostat | Simulator + Matter model | Host core tests; HA pending |
-| Valve percentage and feedback | Valve Configuration and Control, Level feature | Simulator + child valve endpoint | Host fault tests; conformance/HA pending |
+| Valve percentage and feedback | Valve Configuration and Control, Level feature | Simulator + native Matter delegate + child valve endpoint | Host and on-board simulator fault tests; conformance/HA pending |
 | Battery | Power Source | Simulated percentage | Conversion in model; HA pending |
-| Identity, availability | Bridged Device Basic Information | Stable slots + separate NVS identity | Host identity tests; hardware persistence pending |
-| Thread FTD without Wi-Fi | S3 host / H2 UART RCP | Build configuration and runtime setup | Cross-build only; RF/commissioning pending |
-| BLE after commissioning | NimBLE central/observer | Enabled in configuration | No Shelly BLE client yet |
+| Identity, availability | Bridged Device Basic Information | Stable slots + separate NVS identity | Host tests and unchanged identity partition across reboot; commissioning/OTA persistence pending |
+| Thread FTD without Wi-Fi | S3 host / H2 UART RCP | Build configuration and runtime setup | Board reports router eligibility and Wi-Fi uninitialized; commissioning pending |
+| BLE after commissioning | NimBLE central/observer | Bounded passive scan diagnostics | Pre-commission advertisements received; post-commission and Shelly client pending |
 | Gateway OTA | Matter OTA Requestor | Enabled; two S3 slots and boot rollback check | Installation/rollback pending |
 | Maintenance and TRV updates | Standard mappings under investigation | Documentation only | Release blockers |
 

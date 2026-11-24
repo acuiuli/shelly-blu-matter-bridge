@@ -9,13 +9,18 @@
   "connectedhomeip": "0998b87db7aeed765852b778e79cb7d2afb1f909",
   "openthread": "43cc05a9bcf780bd758bad53d897e2d88cf8cb75",
   "nimble": "544bb668add673bc8ab66877773cfa86067df1ea",
-  "dockerfile_sha256": "41bb58c8e383e3096466ed4c2e3f0d325ccc5a540eea1f3ba7d65679e2420fcf",
+  "dockerfile_sha256": "a43d8074522de230bb3705ee1d75e39b99638e755baa229be73db962db1e99bf",
   "python_tools_sha256": "a45cd80056b2b0d8da82a6f9a407902521cbc539b7d1f267a586b5e1c49ee200",
   "patches": [
     {
       "path": ".devcontainer/patches/esp-matter-const-log-tag.patch",
       "sha256": "891d59fa9b94f0dbffcb52cac83ec4dce45c248abeb309ebaa002359c232a6b2",
       "reason": "Const-correct log tag in ESP-Matter 1.6.1 when building with ESP-IDF 6.1.1"
+    },
+    {
+      "path": ".devcontainer/patches/connectedhomeip-valve-level-range.patch",
+      "sha256": "9f6250192c89c1a080189018b929e550712c8082165ae6048090d8b40587634c",
+      "reason": "Enforce the Matter percentage upper bound before accepting native valve commands or DefaultOpenLevel writes"
     }
   ]
 }

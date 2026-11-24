@@ -39,15 +39,18 @@ as source configuration; SDK revisions are fixed by the container digest.
 
 ## Pending evidence and release gates
 
-Thread attachment, FTD runtime eligibility/forwarding, Wi-Fi RF inactivity, post-commission
-BLE, endpoint conformance and HA grouping remain **not run**. Runtime heap, command
-latency, RF coexistence, real BLE bonding/control, persistence through actual reboot/OTA,
+The [current board report](2026-11-24-board-bringup.md) establishes pre-commission
+router eligibility, Wi-Fi uninitialized, runtime heap and passive BLE reception.
+Thread attachment/forwarding, Wi-Fi RF inactivity, post-commission BLE, endpoint
+conformance and HA grouping remain **not run**. Real-device command latency, RF
+coexistence under Thread traffic, BLE bonding/control, persistence through reboot/OTA,
 9.3.0 OTA import/install/rollback, all maintenance functions, TRV updates and the 14-day
-pilot remain **not run**. Runtime Wi-Fi checks are compiled but have not run on a board.
+pilot remain **not run**.
 The [capability matrix](../matter-mapping.md) identifies unresolved standard mappings.
 
-Binary-library redistribution review remains incomplete. No vendor source patches or
-TRV firmware images were introduced. SDK warnings about duplicate Kconfig definitions
+Binary-library redistribution review remains incomplete. Current SDK source patches
+are recorded in the dependency notices; no TRV firmware images were introduced.
+SDK warnings about duplicate Kconfig definitions
 and unused/uninitialized values in unused vendor clusters were observed; they did not
 fail the builds. They are upstream warnings, not hardware qualification results.
 

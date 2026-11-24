@@ -38,6 +38,7 @@ sequence:
       entity_id: valve.example
   - wait_template: >-
       {{ has_value('valve.example') and
+         is_state('valve.example', 'closed') and
          state_attr('valve.example', 'current_position') is number and
          state_attr('valve.example', 'current_position') == 0 }}
     timeout: "00:00:30"

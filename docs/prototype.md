@@ -45,24 +45,42 @@ diag
 ble_scan 10
 ble_scan status
 sim 0 delay 5000
+sim_valve 0 60
+diag
 sim 1 available 0
 sim 2 failures 2
 sim 3 hold 1
 sim 0 manual 25
 sim 1 available 1
 sim 3 hold 0
+sim_valve 0 0
 ```
 
 `delay` is milliseconds; `failures` fails the next N transport transactions; `hold`
 leaves physical position unchanged despite a request. `manual` injects reported
 position and cancels outstanding position intent. Unavailable telemetry remains
-last-known until 30 seconds, then the parent is unreachable and nullable readings
-become null. The child availability interpretation in HA remains a validation gate.
+last-known until 30 seconds, then the parent is unreachable. Thermostat temperature
+and battery readings become null. The native Matter valve server retains last-known
+CurrentLevel/CurrentState; they must be considered together with parent Reachable and
+freshness. The child availability interpretation in HA remains a validation gate.
 `diag` prints numeric Thread role/eligibility and current/minimum heap, without keys.
 The explicit `onboarding` command displays a private development pairing code; omit
 that output from ordinary logs. `diag` also reports whether Wi-Fi is uninitialized.
 The current simulator emits telemetry every 250 ms; it does not model Shelly's real
 advertisement timing, radio interference or battery consumption.
+
+`sim_valve SLOT LEVEL` exercises the same native Open/Close decoder and delegate
+locally over USB: zero closes, 1–100 requests a percentage, and 101–255 deliberately
+tests constraint rejection. It controls simulated devices only. `diag` also prints
+each slot's requested/reported position, telemetry age and command outcome (0 idle,
+1 queued, 2 sent, 3 confirmed, 4 expired, 5 failed, 6 superseded). This path does not
+test network authorization, subscriptions or Home Assistant presentation.
+
+Valve commands use the SDK's native server delegate. Command acceptance queues intent
+and leaves CurrentState transitioning; only new telemetry publishes CurrentLevel and
+confirms motion. Failed or superseded targets are reconciled only on fresh observations.
+The SDK handles standard timed-open countdowns, but their behavior has not yet passed
+controller acceptance testing. No heating algorithm runs in the gateway.
 
 ## Limitations
 

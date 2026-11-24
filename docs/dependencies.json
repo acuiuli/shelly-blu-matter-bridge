@@ -11,13 +11,18 @@
     "connectedhomeip": "0998b87db7aeed765852b778e79cb7d2afb1f909",
     "openthread": "43cc05a9bcf780bd758bad53d897e2d88cf8cb75",
     "nimble": "544bb668add673bc8ab66877773cfa86067df1ea",
-    "dockerfile_sha256": "41bb58c8e383e3096466ed4c2e3f0d325ccc5a540eea1f3ba7d65679e2420fcf",
+    "dockerfile_sha256": "a43d8074522de230bb3705ee1d75e39b99638e755baa229be73db962db1e99bf",
     "python_tools_sha256": "a45cd80056b2b0d8da82a6f9a407902521cbc539b7d1f267a586b5e1c49ee200",
     "patches": [
       {
         "path": ".devcontainer/patches/esp-matter-const-log-tag.patch",
         "sha256": "891d59fa9b94f0dbffcb52cac83ec4dce45c248abeb309ebaa002359c232a6b2",
         "reason": "Const-correct log tag in ESP-Matter 1.6.1 when building with ESP-IDF 6.1.1"
+      },
+      {
+        "path": ".devcontainer/patches/connectedhomeip-valve-level-range.patch",
+        "sha256": "9f6250192c89c1a080189018b929e550712c8082165ae6048090d8b40587634c",
+        "reason": "Enforce the Matter percentage upper bound before accepting native valve commands or DefaultOpenLevel writes"
       }
     ]
   },
@@ -733,7 +738,7 @@
   ],
   "application": {
     "path": "firmware/build/shelly_blu_bridge.bin",
-    "sha256": "2d49b126dfb98fa21a2b1a921709009246b442ded1087169baecbb2529b7774e"
+    "sha256": "e19850f6e0b757e5676e30fe77ced2021e6a3bd2ec800347bd54ecc763b0a146"
   },
   "build_components": [
     "app_update",
@@ -955,7 +960,7 @@
     {
       "target": "esp32s3",
       "path": "esp-idf/chip/lib/libCHIP.a",
-      "sha256": "24d6d4117fda9ccf7605ec609c2fa5cc8e93b29a3d893c5f58e44877ea25a458",
+      "sha256": "45d992631d5eb59ab01eb632849bdf761b2356f883da4e7325a2e8f0be69585b",
       "notice_review": "required"
     },
     {
@@ -1189,7 +1194,7 @@
     {
       "target": "esp32s3",
       "path": "esp-idf/esp_matter/libesp_matter.a",
-      "sha256": "acab97850b40d5ae92277d7941ebcca4702e25a8ea29ec6f4335c82123e16eaf",
+      "sha256": "d51470413ee9f9a0258661992f0912183e6d99b90db693948a4853a149417595",
       "notice_review": "required"
     },
     {
@@ -1345,7 +1350,7 @@
     {
       "target": "esp32s3",
       "path": "esp-idf/main/libmain.a",
-      "sha256": "db8de6941e2bb7e6c94167f5824f12132679661800e9c5fd6959ac2fc93e15c8",
+      "sha256": "632faf15deba65a2a2dd44bd7f233feacc6b120d6472f3d018bfa9f9adf8add1",
       "notice_review": "required"
     },
     {
@@ -3713,7 +3718,7 @@
       "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     }
   ],
-  "modifications": "Official Matter container extended with pinned ESP-IDF source/tool and Python environment updates; ESP-Matter const log-tag patch recorded in toolchain lock",
+  "modifications": "Official Matter container extended with pinned ESP-IDF source/tool and Python environment updates; ESP-Matter const log-tag and connectedhomeip valve-range patches recorded in toolchain lock",
   "license_review_complete": false,
   "remaining_review": [
     "Verify all linked transitive components and embedded headers against notices",

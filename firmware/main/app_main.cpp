@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "ble_diagnostics.h"
 #include "bridge/bridge.hpp"
-#include <app/CommandHandler.h>
-#include <app/data-model/Decode.h>
+#include <app/clusters/valve-configuration-and-control-server/CodegenIntegration.h>
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <esp_console.h>
 #include <esp_heap_caps.h>
+#include <esp_log.h>
 #include <esp_matter.h>
 #include <esp_openthread.h>
 #include <esp_openthread_lock.h>
@@ -16,6 +16,7 @@
 #include <esp_random.h>
 #include <esp_timer.h>
 #include <esp_wifi.h>
+#include <host/ble_hs.h>
 #include <nvs_flash.h>
 #include <openthread/thread.h>
 #include <openthread/thread_ftd.h>
@@ -32,7 +33,6 @@
 
 using namespace esp_matter;
 using namespace chip::app::Clusters;
-using Status = chip::Protocols::InteractionModel::Status;
 static bridge::Engine engine;
 static bridge::Simulator simulator;
 static bridge::Identity identity;
@@ -77,49 +77,78 @@ static esp_err_t identify_cb(identification::callback_type_t, uint16_t, uint8_t,
     return ESP_OK; // no LED driver in this prototype
 }
 
-// Intercept the standard server command: its default immediate-motion behavior
-// must not turn a transport acknowledgment into confirmed physical position.
-static esp_err_t valve_command(const chip::app::ConcreteCommandPath &path, chip::TLV::TLVReader &reader,
-                               void *opaque) {
-    using namespace ValveConfigurationAndControl;
-    int level = 0;
-    Status status = Status::Success;
-    if (path.mCommandId == Commands::Open::Id) {
-        Commands::Open::DecodableType args;
-        if (chip::app::DataModel::Decode(reader, args) != CHIP_NO_ERROR)
-            status = Status::InvalidCommand;
-        else if (args.openDuration.HasValue() && !args.openDuration.Value().IsNull())
-            status = Status::InvalidCommand; // timed operation requires a separate implementation
-        else
-            level = args.targetLevel.HasValue() ? args.targetLevel.Value() : 100;
-        if (status == Status::Success && (level < 1 || level > 100))
-            status = Status::ConstraintError;
-    } else {
-        Commands::Close::DecodableType args;
-        if (chip::app::DataModel::Decode(reader, args) != CHIP_NO_ERROR)
-            status = Status::InvalidCommand;
+// The native Matter server owns valve attributes and command validation. The
+// delegate queues intent; only subsequent telemetry may confirm physical motion.
+class ValveDelegate final : public ValveConfigurationAndControl::Delegate {
+  public:
+    size_t slot = 0;
+    chip::app::DataModel::Nullable<chip::Percent>
+    HandleOpenValve(chip::app::DataModel::Nullable<chip::Percent> level) override {
+        if (!publishing &&
+            (level.IsNull() || !engine.request(slot, bridge::Field::position, level.Value(), now_ms())))
+            ESP_LOGE("bridge", "Rejected valve intent for slot %u", unsigned(slot));
+        return {}; // Never turn command acceptance into a reported position.
     }
-    bool accepted = false;
-    if (status == Status::Success) {
-        for (size_t d = 0; d < bridge::device_count; ++d)
-            if (path.mEndpointId == identity.valve_endpoint(d))
-                accepted = engine.request(d, bridge::Field::position, level, now_ms());
-        if (!accepted)
-            status = Status::ConstraintError;
+    CHIP_ERROR HandleCloseValve() override {
+        return publishing || engine.request(slot, bridge::Field::position, 0, now_ms())
+                   ? CHIP_NO_ERROR
+                   : CHIP_ERROR_INVALID_ARGUMENT;
     }
-    static_cast<chip::app::CommandHandler *>(opaque)->AddStatus(path, status);
-    // ESP-Matter runs its built-in callback only when user_callback returns ESP_OK.
-    return ESP_FAIL;
-}
+    void HandleRemainingDurationTick(uint32_t) override {}
+};
+static std::array<ValveDelegate, bridge::device_count> valve_delegates;
+
 static void update(uint16_t ep, uint32_t c, uint32_t a, esp_matter_attr_val_t v) {
-    ESP_ERROR_CHECK(attribute::update(ep, c, a, &v));
+    esp_err_t err = attribute::update(ep, c, a, &v);
+    if (err != ESP_OK)
+        ESP_LOGE("bridge", "Attribute update failed: endpoint=%u cluster=0x%lx attribute=0x%lx", unsigned(ep),
+                 static_cast<unsigned long>(c), static_cast<unsigned long>(a));
+    ESP_ERROR_CHECK(err);
+}
+static void publish_valve(size_t d, const bridge::State &s) {
+    using namespace ValveConfigurationAndControl;
+    static std::array<std::optional<bridge::Time>, bridge::device_count> last_observation;
+    static std::array<uint64_t, bridge::device_count> reconciled_token{};
+    if (!s.reachable || !s.reported || last_observation[d] == s.last_seen)
+        return;
+    last_observation[d] = s.last_seen;
+    auto ep = identity.valve_endpoint(d);
+    const auto &cmd = s.commands[1];
+    bool active = cmd.outcome == bridge::Outcome::queued || cmd.outcome == bridge::Outcome::sent;
+    auto level = static_cast<chip::Percent>(s.reported->position);
+    // Clear an obsolete SDK target only against a NEW transport observation.
+    // Suppress delegate enqueue while reconciling, and preserve timed-open state
+    // on ordinary successful reports. Unreachable devices retain last-known data.
+    if (!active && cmd.outcome != bridge::Outcome::confirmed && cmd.token != reconciled_token[d]) {
+        auto err =
+            level == 0 ? CloseValve(ep) : SetValveLevel(ep, chip::app::DataModel::MakeNullable(level), {});
+        ESP_ERROR_CHECK(err == CHIP_NO_ERROR ? ESP_OK : ESP_FAIL);
+        reconciled_token[d] = cmd.token;
+    }
+    ESP_ERROR_CHECK(UpdateCurrentLevel(ep, level) == CHIP_NO_ERROR ? ESP_OK : ESP_FAIL);
+    if (!active)
+        ESP_ERROR_CHECK(UpdateCurrentState(ep, level ? ValveStateEnum::kOpen : ValveStateEnum::kClosed) ==
+                                CHIP_NO_ERROR
+                            ? ESP_OK
+                            : ESP_FAIL);
+}
+static void confirm_boot_health() {
+    static bool checked = false;
+    if (checked || !ble_hs_synced())
+        return;
+    // A complete model publication must succeed before accepting an OTA image.
+    // This still does not qualify network connectivity or physical valve health.
+    esp_ota_img_states_t state;
+    auto *running = esp_ota_get_running_partition();
+    if (esp_ota_get_state_partition(running, &state) == ESP_OK && state == ESP_OTA_IMG_PENDING_VERIFY)
+        ESP_ERROR_CHECK(esp_ota_mark_app_valid_cancel_rollback());
+    checked = true;
 }
 static void publish(intptr_t) {
     simulator.step(engine, now_ms());
     publishing = true;
     for (size_t d = 0; d < bridge::device_count; ++d) {
         auto ep = identity.thermostat_endpoint(d);
-        auto vp = identity.valve_endpoint(d);
         const auto &s = engine.state(d);
         update(ep, BridgedDeviceBasicInformation::Id,
                BridgedDeviceBasicInformation::Attributes::Reachable::Id, esp_matter_bool(s.reachable));
@@ -139,23 +168,10 @@ static void publish(intptr_t) {
         update(
             ep, PowerSource::Id, PowerSource::Attributes::BatPercentRemaining::Id,
             esp_matter_nullable_uint8(s.reachable ? nullable<uint8_t>(t.battery * 2) : nullable<uint8_t>()));
-        update(vp, ValveConfigurationAndControl::Id,
-               ValveConfigurationAndControl::Attributes::CurrentLevel::Id,
-               esp_matter_nullable_uint8(s.reachable ? nullable<uint8_t>(t.position) : nullable<uint8_t>()));
-        update(vp, ValveConfigurationAndControl::Id,
-               ValveConfigurationAndControl::Attributes::CurrentState::Id,
-               esp_matter_nullable_enum8(s.reachable ? nullable<uint8_t>(t.position ? 1 : 0)
-                                                     : nullable<uint8_t>()));
-        const auto &cmd = s.commands[1];
-        bool active = cmd.outcome == bridge::Outcome::queued || cmd.outcome == bridge::Outcome::sent;
-        update(vp, ValveConfigurationAndControl::Id,
-               ValveConfigurationAndControl::Attributes::TargetLevel::Id,
-               esp_matter_nullable_uint8(active ? cmd.value : t.position));
-        update(vp, ValveConfigurationAndControl::Id,
-               ValveConfigurationAndControl::Attributes::TargetState::Id,
-               esp_matter_nullable_enum8((active ? cmd.value : t.position) ? 1 : 0));
+        publish_valve(d, s);
     }
     publishing = false;
+    confirm_boot_health();
 }
 static void create_devices(node_t *node) {
     endpoint::aggregator::config_t aggregator_config;
@@ -189,18 +205,14 @@ static void create_devices(node_t *node) {
         ESP_ERROR_CHECK(power ? ESP_OK : ESP_FAIL);
         cluster::power_source::attribute::create_bat_percent_remaining(power, nullable<uint8_t>(), 0, 200);
         endpoint::water_valve::config_t vc;
+        valve_delegates[d].slot = d;
+        vc.valve_configuration_and_control.delegate = &valve_delegates[d];
         auto *vp = endpoint::water_valve::create(node, &vc, ENDPOINT_FLAG_NONE, nullptr);
         ESP_ERROR_CHECK(vp && endpoint::get_id(vp) == identity.valve_endpoint(d) ? ESP_OK : ESP_FAIL);
         ESP_ERROR_CHECK(endpoint::set_parent_endpoint(vp, ep));
         auto *valve = cluster::get(vp, ValveConfigurationAndControl::Id);
         cluster::valve_configuration_and_control::feature::level::config_t lc;
         ESP_ERROR_CHECK(cluster::valve_configuration_and_control::feature::level::add(valve, &lc));
-        command::set_user_callback(
-            command::get(valve, ValveConfigurationAndControl::Commands::Open::Id, COMMAND_FLAG_ACCEPTED),
-            valve_command);
-        command::set_user_callback(
-            command::get(valve, ValveConfigurationAndControl::Commands::Close::Id, COMMAND_FLAG_ACCEPTED),
-            valve_command);
     }
 }
 
@@ -257,6 +269,73 @@ static int sim_command(int argc, char **argv) {
     }
     return 0;
 }
+static void invoke_simulated_valve(intptr_t arg) {
+    using namespace ValveConfigurationAndControl;
+    auto *p = reinterpret_cast<Injection *>(arg);
+    uint8_t buffer[64];
+    chip::TLV::TLVWriter writer;
+    writer.Init(buffer);
+    CHIP_ERROR err;
+    if (p->value) {
+        Commands::Open::Type args;
+        args.targetLevel.SetValue(static_cast<uint8_t>(p->value));
+        err = args.Encode(writer, chip::TLV::AnonymousTag());
+    } else {
+        Commands::Close::Type args;
+        err = args.Encode(writer, chip::TLV::AnonymousTag());
+    }
+    if (err == CHIP_NO_ERROR)
+        err = writer.Finalize();
+    chip::TLV::TLVReader reader;
+    reader.Init(buffer, writer.GetLengthWritten());
+    if (err == CHIP_NO_ERROR)
+        err = reader.Next();
+    auto ep = identity.valve_endpoint(p->slot);
+    auto *cluster = FindClusterOnEndpoint(ep);
+    if (err == CHIP_NO_ERROR && cluster) {
+        chip::Access::SubjectDescriptor subject;
+        chip::app::DataModel::InvokeRequest request(
+            {ep, Id, p->value ? Commands::Open::Id : Commands::Close::Id}, subject);
+        // Local simulator diagnostics exercise native decoding and validation.
+        // Network access control and commissioning still require controller tests.
+        auto status = cluster->InvokeCommand(request, reader, nullptr);
+        chip::app::DataModel::ActionReturnStatus::StringStorage storage;
+        std::printf("Valve invoke slot=%u level=%d success=%u status=%s\n", unsigned(p->slot), p->value,
+                    unsigned(status && status->IsSuccess()),
+                    status ? status->c_str(storage) : "missing-response");
+    } else {
+        std::printf("Valve diagnostic encoding failed\n");
+    }
+    delete p;
+}
+static int sim_valve_command(int argc, char **argv) {
+    if (argc != 3)
+        return 1;
+    char *end;
+    long d = std::strtol(argv[1], &end, 10);
+    if (!argv[1][0] || *end || d < 0 || d >= long(bridge::device_count))
+        return 1;
+    long level = std::strtol(argv[2], &end, 10);
+    if (!argv[2][0] || *end || level < 0 || level > 255)
+        return 1;
+    auto *p = new Injection{size_t(d), 0, int(level)};
+    if (chip::DeviceLayer::PlatformMgr().ScheduleWork(invoke_simulated_valve,
+                                                      reinterpret_cast<intptr_t>(p)) != CHIP_NO_ERROR) {
+        delete p;
+        return 1;
+    }
+    return 0;
+}
+static void show_simulator_state(intptr_t) {
+    auto now = now_ms();
+    for (size_t d = 0; d < bridge::device_count; ++d) {
+        const auto &s = engine.state(d);
+        const auto &cmd = s.commands[1];
+        std::printf("TRV slot=%u reachable=%u requested=%d reported=%d outcome=%u age_ms=%llu\n", unsigned(d),
+                    unsigned(s.reachable), cmd.value, s.reported ? s.reported->position : -1,
+                    unsigned(cmd.outcome), static_cast<unsigned long long>(now - s.last_seen));
+    }
+}
 static int diagnostic_command(int, char **) {
     if (!esp_openthread_get_instance()) {
         std::printf("Thread stack is not initialized\n");
@@ -272,7 +351,7 @@ static int diagnostic_command(int, char **) {
                 unsigned(esp_get_free_heap_size()), unsigned(esp_get_minimum_free_heap_size()),
                 unsigned(wifi_uninitialized), publish_rejections.load());
     esp_openthread_lock_release();
-    return 0;
+    return chip::DeviceLayer::PlatformMgr().ScheduleWork(show_simulator_state, 0) == CHIP_NO_ERROR ? 0 : 1;
 }
 static void show_onboarding(intptr_t) {
     char buffer[64];
@@ -316,12 +395,12 @@ extern "C" void app_main() {
     ESP_ERROR_CHECK(esp_openthread_get_instance() ? ESP_OK : ESP_FAIL);
     wifi_mode_t wifi_mode;
     ESP_ERROR_CHECK(esp_wifi_get_mode(&wifi_mode) == ESP_ERR_WIFI_NOT_INIT ? ESP_OK : ESP_FAIL);
-    // Mark the image healthy only after model and Thread stack initialization.
-    // This is a prototype boot check; radio/controller health still needs hardware validation.
-    esp_ota_img_states_t state;
-    auto *running = esp_ota_get_running_partition();
-    if (esp_ota_get_state_partition(running, &state) == ESP_OK && state == ESP_OTA_IMG_PENDING_VERIFY)
-        ESP_ERROR_CHECK(esp_ota_mark_app_valid_cancel_rollback());
+    for (size_t d = 0; d < bridge::device_count; ++d) {
+        ESP_ERROR_CHECK(ValveConfigurationAndControl::FindClusterOnEndpoint(identity.valve_endpoint(d))
+                            ? ESP_OK
+                            : ESP_FAIL);
+        ValveConfigurationAndControl::SetDefaultDelegate(identity.valve_endpoint(d), &valve_delegates[d]);
+    }
     esp_console_repl_t *repl = nullptr;
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     esp_console_dev_usb_serial_jtag_config_t usb = ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT();
@@ -331,6 +410,11 @@ extern "C" void app_main() {
     sim.help = "sim SLOT available|delay|failures|hold|manual VALUE";
     sim.func = sim_command;
     ESP_ERROR_CHECK(esp_console_cmd_register(&sim));
+    esp_console_cmd_t valve{};
+    valve.command = "sim_valve";
+    valve.help = "Native simulated valve command: sim_valve SLOT LEVEL (0 closes; 101..255 test rejection)";
+    valve.func = sim_valve_command;
+    ESP_ERROR_CHECK(esp_console_cmd_register(&valve));
     esp_console_cmd_t diag{};
     diag.command = "diag";
     diag.help = "Thread role, eligibility and memory; no credentials";

@@ -18,8 +18,14 @@ revisions are recorded in [toolchain.lock.json](tools/toolchain.lock.json).
 ESP-Matter modification: `esp_matter_icd_configuration.cpp` changes its constant
 log tag to `const char *` for IDF 6.1.1 compilation. The modified file carries a
 prominent change notice. The [patch](.devcontainer/patches/esp-matter-const-log-tag.patch)
-is checked by hash and included in the notice inventory. Other SDK source is
-unmodified. The application does not initialize a cloud client or HTTP service.
+is checked by hash and included in the notice inventory.
+
+connectedhomeip modification: `ValveConfigurationAndControlCluster.cpp` rejects
+percentages above 100 before accepting Open commands or DefaultOpenLevel writes.
+The modified function carries a change notice; its
+[patch](.devcontainer/patches/connectedhomeip-valve-level-range.patch) is checked by
+hash and included in the inventory. The application does not initialize a cloud
+client or HTTP service.
 
 The resolved registry set has five components: cJSON (MIT), ESP Delta OTA,
 ESP Encrypted Image, ESP Secure Certificate Manager and mDNS (Apache-2.0 root
@@ -36,7 +42,7 @@ After successful S3 and H2 builds, run:
 
 The output includes SDK and recursive submodule revisions, registry content hashes,
 selected build components, loaded archive hashes, discovered license/NOTICE texts,
-the compatibility patch, Dockerfile, Python tool lock, link maps and SHA256SUMS.
+the SDK patches, Dockerfile, Python tool lock, link maps and SHA256SUMS.
 [The checked-in inventory](docs/dependencies.json) records the current resolution.
 Development Python tools are recorded for reproducibility and are not linked into
 the firmware. Refresh the inventory and notices on dependency changes.

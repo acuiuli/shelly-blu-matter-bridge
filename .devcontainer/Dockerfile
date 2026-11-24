@@ -16,3 +16,5 @@ LABEL org.opencontainers.image.description="Shelly BLU bridge development toolch
 COPY patches /tmp/bridge-patches
 RUN git -C /opt/espressif/esp-matter apply --check /tmp/bridge-patches/esp-matter-const-log-tag.patch \
     && git -C /opt/espressif/esp-matter apply /tmp/bridge-patches/esp-matter-const-log-tag.patch
+RUN git -C /opt/espressif/esp-matter/connectedhomeip/connectedhomeip apply --check /tmp/bridge-patches/connectedhomeip-valve-level-range.patch \
+    && git -C /opt/espressif/esp-matter/connectedhomeip/connectedhomeip apply /tmp/bridge-patches/connectedhomeip-valve-level-range.patch
