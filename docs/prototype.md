@@ -40,6 +40,8 @@ valve percentage commands in Home Assistant. Read reported position independentl
 On the S3 USB console (slots are zero-based):
 
 ```text
+commissioning status
+commissioning open
 onboarding
 diag
 ble_scan 10
@@ -64,6 +66,12 @@ and battery readings become null. The native Matter valve server retains last-kn
 CurrentLevel/CurrentState; they must be considered together with parent Reachable and
 freshness. The child availability interpretation in HA remains a validation gate.
 `diag` prints numeric Thread role/eligibility and current/minimum heap, without keys.
+`commissioning status` prints pairing-window state, fabric count, actual NimBLE
+advertising state, Matter BLE connection count and uptime, without credentials.
+`commissioning open` opens a closed pairing window for 15 minutes; it does not
+replace an existing window or interrupt an active pairing exchange. Use it before
+retrying phone discovery after a timeout. `onboarding` only displays the code;
+it does not open or extend the pairing window.
 The explicit `onboarding` command displays a private development pairing code; omit
 that output from ordinary logs. `diag` also reports whether Wi-Fi is uninitialized.
 The current simulator emits telemetry every 250 ms; it does not model Shelly's real

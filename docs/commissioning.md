@@ -14,13 +14,22 @@ Flash only after the two serial devices have been identified without ambiguity.
 1. Confirm the existing border router and HA Matter integration work with a known
    Thread device. Confirm local IPv6 and multicast discovery between HA and the BR.
 2. Build and flash the [prototype](prototype.md), preserving identity and credentials
-   during upgrades. Review the development attestation limitations in that guide.
-3. Run `onboarding` on the local USB console to explicitly display the private development
+   during upgrades. Configure [development certificate trust](#development-certificate-trust)
+   on the controller before pairing this SDK-test-credential prototype.
+3. Run `commissioning status` on the USB console. For initial pairing, expect
+   `window_open=1 fabrics=0 ble_enabled=1 ble_advertising=1`. If the window has
+   expired, run `commissioning open` to open it for 15 minutes, then check status
+   again. An existing BLE connection can temporarily stop advertisements during
+   pairing; do not interrupt an active exchange. The command preserves NVS and identity.
+   Run `onboarding` to explicitly display the private development
    commissioning code. Keep that output out of shared logs. In the Home Assistant companion
    app, open Settings > Connectivity > Matter > Add device, choose a new device and
    enter the code manually. See the [current HA steps](https://www.home-assistant.io/integrations/matter/#adding-a-matter-device-to-home-assistant)
    for Android/iOS options and test-accessory prompts. Use the existing preferred Thread network.
    Do not create a second dataset/network to make an attach failure disappear.
+   For this development board, accept an uncertified-device warning using Continue
+   or Set up anyway when offered. The prototype uses SDK test attestation and is
+   not presented as certified.
 4. Check `diag`: router eligibility must be true. OpenThread role values are 0 disabled,
    1 detached, 2 child, 3 router, 4 leader. A child may be a router-eligible end device.
    Router role is elected; do not force it as a permanent condition.
@@ -35,12 +44,27 @@ The normal path provisions Thread credentials over Matter commissioning. USB is 
 local path for flashing, simulator configuration and diagnostics; future real enrollment
 must also use USB and persist secure bindings. No production enrollment command exists.
 
+## Development certificate trust
+
+The prototype uses SDK test attestation credentials. Android's Continue / Set up
+anyway prompt and Home Assistant Matter Server's attestation policy are separate
+checks. If Matter Server reports that test/development certificates were rejected,
+open the Matter Server app's Configuration in HA OS, enable **Enable test-net DCL
+usage** (`enable_test_net_dcl: true`), save and restart that app before retrying.
+This enables development/test trust on that controller; see the
+[official app configuration](https://github.com/home-assistant/app-matter-server/blob/main/matter_server/DOCS.md#configuration).
+Do not claim that this makes the firmware certified. Record the actual server
+implementation/version and setting in validation results.
+
 ## Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
 | Host starts but RCP does not respond | H2 image/SDK match, UART pins/baud, power, correct USB port |
+| Phone says device not found | `commissioning status`, then `commissioning open` if expired; verify active BLE advertising, phone Bluetooth/permissions and short range |
 | Thread remains detached | Existing network availability, commissioning credentials, radio range; inspect privately |
+| Joins Thread but phone cannot reach it | Platform DNS-SD/SRP backend, service registration, IPv6 routing through the existing border router and local multicast discovery; attachment alone does not complete commissioning |
+| Android accepts the warning but HA reports a generic error | Matter Server logs; test-certificate rejection requires the controller's development trust option above |
 | HA cannot discover commissioned node | IPv6 routing/mDNS, controller/BR state, network isolation |
 | Always child despite eligibility | Mesh election/topology; child role alone does not disprove eligibility |
 | Valve appears separately or is missing | Descriptor parent links, Water Valve type, Level feature and HA version; record as a failed grouping gate |

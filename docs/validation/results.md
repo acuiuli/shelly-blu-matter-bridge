@@ -39,10 +39,13 @@ as source configuration; SDK revisions are fixed by the container digest.
 
 ## Pending evidence and release gates
 
-The [current board report](2026-11-24-board-bringup.md) establishes pre-commission
-router eligibility, Wi-Fi uninitialized, runtime heap and passive BLE reception.
-Thread attachment/forwarding, Wi-Fi RF inactivity, post-commission BLE, endpoint
-conformance and HA grouping remain **not run**. Real-device command latency, RF
+The [current board report](2026-11-24-board-bringup.md) establishes Thread attachment
+and router election, Wi-Fi uninitialized, runtime heap and passive BLE reception
+after successful HA commissioning. The user confirmed four simulated climates,
+four valve controls and battery entities. Test-DCL trust is required on the controller
+for this development image. Mesh forwarding performance, Wi-Fi RF inactivity,
+device-type conformance and a full review of HA composition/grouping
+remain **not run**. Real-device command latency, RF
 coexistence under Thread traffic, BLE bonding/control, persistence through reboot/OTA,
 9.3.0 OTA import/install/rollback, all maintenance functions, TRV updates and the 14-day
 pilot remain **not run**.

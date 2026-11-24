@@ -13,6 +13,11 @@ OpenThread selects Router/REED roles. Configuration, attachment and actual mesh
 forwarding need separate evidence. The SDK initializes the FTD device type through
 ESP-Matter; the build also checks the resolved Kconfig values.
 
+Thread service discovery uses the SDK's platform DNS-SD backend with OpenThread
+SRP and DNS clients. `CONFIG_USE_MINIMAL_MDNS=n` is required: the minimal mDNS
+backend cannot replace SRP registration through the existing border router. CI
+checks both the resolved Kconfig and generated `chip_mdns = "platform"` build argument.
+
 SDK transitive dependencies still select the Wi-Fi component at compile time. Both
 Matter Wi-Fi roles are disabled, and application startup fails if the Wi-Fi driver is
 initialized. USB `diag` also reports this invariant. A compiled SDK component is not

@@ -35,12 +35,12 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 
 | Capability | Planned interface | Implemented | Validated |
 | --- | --- | --- | --- |
-| Temperature, setpoint, Off/Heat | Thermostat | Simulator + Matter model | Host core tests; HA pending |
-| Valve percentage and feedback | Valve Configuration and Control, Level feature | Simulator + native Matter delegate + child valve endpoint | Host and on-board simulator fault tests; conformance/HA pending |
-| Battery | Power Source | Simulated percentage | Conversion in model; HA pending |
+| Temperature, setpoint, Off/Heat | Thermostat | Simulator + Matter model | Host core tests; four HA climates discovered; HA writes pending |
+| Valve percentage and feedback | Valve Configuration and Control, Level feature | Simulator + native Matter delegate + child valve endpoint | Fault tests; four HA valves discovered; HA command and confirmed 60% feedback; conformance pending |
+| Battery | Power Source | Simulated percentage | Battery entities discovered in HA |
 | Identity, availability | Bridged Device Basic Information | Stable slots + separate NVS identity | Host tests and unchanged identity partition across reboot; commissioning/OTA persistence pending |
-| Thread FTD without Wi-Fi | S3 host / H2 UART RCP | Build configuration and runtime setup | Board reports router eligibility and Wi-Fi uninitialized; commissioning pending |
-| BLE after commissioning | NimBLE central/observer | Bounded passive scan diagnostics | Pre-commission advertisements received; post-commission and Shelly client pending |
+| Thread FTD without Wi-Fi | S3 host / H2 UART RCP | Build configuration and runtime setup | Commissioned in HA, elected Thread router; Wi-Fi uninitialized |
+| BLE after commissioning | NimBLE central/observer | Bounded passive scan diagnostics | 23 advertisements after HA commissioning while Thread router; Shelly client pending |
 | Gateway OTA | Matter OTA Requestor | Enabled; two S3 slots and boot rollback check | Installation/rollback pending |
 | Maintenance and TRV updates | Standard mappings under investigation | Documentation only | Release blockers |
 

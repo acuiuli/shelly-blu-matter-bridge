@@ -2,6 +2,8 @@
 #include "ble_diagnostics.h"
 #include "bridge/bridge.hpp"
 #include <app/clusters/valve-configuration-and-control-server/CodegenIntegration.h>
+#include <app/server/CommissioningWindowManager.h>
+#include <app/server/Server.h>
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -16,11 +18,13 @@
 #include <esp_random.h>
 #include <esp_timer.h>
 #include <esp_wifi.h>
+#include <host/ble_gap.h>
 #include <host/ble_hs.h>
 #include <nvs_flash.h>
 #include <openthread/thread.h>
 #include <openthread/thread_ftd.h>
 #include <platform/CHIPDeviceLayer.h>
+#include <platform/ConnectivityManager.h>
 #include <platform/ESP32/OpenthreadLauncher.h>
 #include <setup_payload/OnboardingCodesUtil.h>
 
@@ -367,6 +371,41 @@ static void show_onboarding(intptr_t) {
 static int onboarding_command(int, char **) {
     return chip::DeviceLayer::PlatformMgr().ScheduleWork(show_onboarding, 0) == CHIP_NO_ERROR ? 0 : 1;
 }
+static void show_commissioning_status() {
+    auto &server = chip::Server::GetInstance();
+    auto &connectivity = chip::DeviceLayer::ConnectivityMgr();
+    std::printf("Commissioning window_open=%u fabrics=%u ble_enabled=%u ble_advertising=%u "
+                "ble_connections=%u uptime_ms=%llu\n",
+                unsigned(server.GetCommissioningWindowManager().IsCommissioningWindowOpen()),
+                unsigned(server.GetFabricTable().FabricCount()),
+                unsigned(connectivity.IsBLEAdvertisingEnabled()), unsigned(ble_gap_adv_active()),
+                unsigned(connectivity.NumBLEConnections()), static_cast<unsigned long long>(now_ms()));
+}
+static void commissioning_work(intptr_t open) {
+    auto &manager = chip::Server::GetInstance().GetCommissioningWindowManager();
+    if (open) {
+        // Do not interrupt an ongoing PASE exchange or replace a controller's
+        // enhanced window. No fabrics, network keys or identity are erased.
+        if (manager.GetPASESession().HasValue() || chip::DeviceLayer::ConnectivityMgr().NumBLEConnections())
+            std::printf("Pairing already in progress; commissioning window unchanged\n");
+        else if (manager.IsCommissioningWindowOpen())
+            std::printf("Commissioning window is already open\n");
+        else {
+            auto err = manager.OpenBasicCommissioningWindow(chip::System::Clock::Seconds32(900));
+            std::printf("Commissioning window open success=%u duration_seconds=900\n",
+                        unsigned(err == CHIP_NO_ERROR));
+        }
+    }
+    show_commissioning_status();
+}
+static int commissioning_command(int argc, char **argv) {
+    if (argc != 2 || (std::strcmp(argv[1], "status") && std::strcmp(argv[1], "open")))
+        return 1;
+    return chip::DeviceLayer::PlatformMgr().ScheduleWork(commissioning_work,
+                                                         std::strcmp(argv[1], "open") == 0) == CHIP_NO_ERROR
+               ? 0
+               : 1;
+}
 extern "C" void app_main() {
     ESP_ERROR_CHECK(nvs_flash_init()); // fail visibly; never erase credentials automatically
     load_identity();
@@ -425,6 +464,12 @@ extern "C" void app_main() {
     onboarding.help = "Explicitly display PRIVATE development commissioning code over USB";
     onboarding.func = onboarding_command;
     ESP_ERROR_CHECK(esp_console_cmd_register(&onboarding));
+    esp_console_cmd_t commissioning{};
+    commissioning.command = "commissioning";
+    commissioning.help =
+        "commissioning status|open: inspect pairing or open a 15-minute local pairing window";
+    commissioning.func = commissioning_command;
+    ESP_ERROR_CHECK(esp_console_cmd_register(&commissioning));
     register_ble_diagnostics();
     ESP_ERROR_CHECK(esp_console_start_repl(repl));
     for (;;) {
