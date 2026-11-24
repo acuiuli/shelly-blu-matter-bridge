@@ -40,8 +40,10 @@ architectures concurrently.
 
 The core has no SDK dependency, radio assumptions or heating controller. This small
 transport boundary is enough for future devices; no plugin framework is introduced.
-All firmware state mutations run on the Matter task. USB work is scheduled onto it.
-A real BLE transport must serialize observations onto that same task and discard
+Bridged-device state mutations run on the Matter task. USB simulator work is scheduled
+onto it. BLE diagnostics keep separate bounded caches on the NimBLE task with locked
+snapshots for USB access. A real BLE transport must serialize observations onto the
+Matter task and discard
 outdated tokens before writes; a write already transmitted cannot be undone. In that
 case reread actual state and converge to the latest intent without replaying the queue.
 

@@ -20,7 +20,7 @@ flowchart LR
     HA[Home Assistant / Matter Server] <-->|LAN IPv6| BR[Existing Thread border router]
     BR <-->|Thread mesh carrying Matter| H2[ESP32-H2: Thread RCP]
     H2 <-->|UART Spinel| S3[ESP32-S3: Matter + OpenThread FTD + BLE]
-    S3 <-->|BLE: future real transport| TRV[Up to four Shelly BLU TRVs]
+    S3 <-->|BLE: read probe; control planned| TRV[Up to four Shelly BLU TRVs]
     S3 --- SIM[Four simulated TRVs implemented]
 ```
 
