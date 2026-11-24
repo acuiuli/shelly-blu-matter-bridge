@@ -45,15 +45,17 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 | Maintenance and TRV updates | Standard mappings under investigation | Documentation only | Release blockers |
 
 Use an **ESP Thread BR-Zigbee GW Main Board Only**, USB-C data cables and stable 5 V
-power. Verify the received board has **8 MB S3 flash** before flashing this partition
+power. Verify the received board has **at least 8 MB S3 flash** before flashing this partition
 layout; older 4 MB units require a different layout. No Ethernet Sub Board is needed.
 Hardware validation also needs an existing Thread border router, Home Assistant,
 Matter Server **9.3.0** as the OTA validation target, and eventually one then four TRVs.
 
 ## Reproducible development
 
-Linux/WSL with Docker, Python 3 and Git is sufficient. The [official SDK container](https://docs.espressif.com/projects/esp-matter/en/latest/esp32/developing.html#using-docker-image)
-is pinned by digest in [toolchain.lock.json](tools/toolchain.lock.json). Run:
+Linux/WSL with Docker, Python 3 and Git is sufficient. The [official SDK base image](https://docs.espressif.com/projects/esp-matter/en/latest/esp32/developing.html#using-docker-image)
+is pinned by digest in [toolchain.lock.json](tools/toolchain.lock.json). The development
+recipe upgrades it to ESP-Matter 1.6.1 and ESP-IDF 6.1.1 with locked build tools.
+See [current versions and workflow purposes](docs/development-versions.md). Run:
 
 ```sh
 ./tools/dev.sh python3 tools/check_toolchain.py

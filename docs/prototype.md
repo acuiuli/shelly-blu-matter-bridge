@@ -1,7 +1,7 @@
 # Prototype build and use
 
-Use the commands in the [README](../README.md). The digest locks ESP-IDF 5.5.5,
-ESP-Matter release/v1.5, connectedhomeip, OpenThread and NimBLE to the revisions in
+Use the commands in the [README](../README.md). The base digest, Dockerfile and package lock fix ESP-IDF 6.1.1,
+ESP-Matter 1.6.1, connectedhomeip, OpenThread and NimBLE to the revisions in
 [the lock](../tools/toolchain.lock.json). Compilation does not establish transport
 feasibility. Test credentials are supplied by the SDK example providers; these images
 are development artifacts. Keep commissioning payloads and serial logs private.
@@ -23,12 +23,16 @@ revision in your test report. H2 updates remain a deliberate USB operation.
 
 ## Flash the S3
 
-After verifying 8 MB flash, use `idf.py -C firmware -p YOUR_S3_PORT flash monitor`
+After verifying at least 8 MB flash, use `idf.py -C firmware -p YOUR_S3_PORT flash monitor`
 inside the container with the USB serial device passed through, or from an identically
 pinned local SDK. `tools/dev.sh` does not forward USB devices; for Docker add an explicit
 `--device` mapping in a local invocation. WSL requires USB forwarding as documented by
 [Espressif](https://docs.espressif.com/projects/esp-matter/en/latest/esp32/developing.html).
 Do not use `erase-flash` for normal upgrades. Preserve NVS and `bridge_store`.
+For the first migration from factory firmware, back up both complete flash devices
+and initialize the new application data partitions before starting this firmware.
+With one cable, hold the S3 BOOT button while moving power between USB ports to
+prevent the factory host from automatically replacing the newly flashed H2 RCP.
 
 The firmware creates four simulated TRVs. No real valve is controlled. Commission it
 as described in [commissioning](commissioning.md), then try climate setpoints and
@@ -38,6 +42,8 @@ On the S3 USB console (slots are zero-based):
 ```text
 onboarding
 diag
+ble_scan 10
+ble_scan status
 sim 0 delay 5000
 sim 1 available 0
 sim 2 failures 2
@@ -62,7 +68,11 @@ advertisement timing, radio interference or battery consumption.
 
 Real discovery, enrollment, GATT/BTHome decoding, bonding, calibration, external
 sensor input and TRV updates are not implemented. NimBLE central/observer support
-is configured, but persistent scanning after commissioning must still be proved.
-USB currently supports simulator configuration and diagnostics; secure real-valve
+is configured. Run `ble_scan 10`, wait ten seconds, then `ble_scan status` before
+and after commissioning. It reports synchronization, completion, advertisement counts
+and RSSI bounds without addresses or payloads. Receiving advertisements proves scanning;
+real GATT connections and bonding need separate tests. Post-commission scanning must
+still be validated on hardware.
+USB supports simulator configuration, bounded passive BLE scans and diagnostics; secure real-valve
 enrollment is a subsequent milestone. Default development credentials, security
 hardening, full conformance testing, and real OTA rollback qualification remain open.

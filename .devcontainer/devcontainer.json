@@ -1,6 +1,13 @@
 {
   "name": "Shelly BLU bridge (experimental)",
-  "image": "espressif/esp-matter@sha256:cfb09a0132bb81cdb3935ac0351f86cb62d580ad02822220298cdcb2b923dc7e",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".",
+    "args": {
+      "BASE_IMAGE": "espressif/esp-matter@sha256:a55d497c9b53e5a65789360e47ffb5cc3622a386e7b5bb76d2129578dc33c4e6",
+      "ESP_IDF_REV": "051e4c4eb20346e043cdd47bc388fde75ff8af63"
+    }
+  },
   "workspaceFolder": "/workspaces/shelly-blu-matter-bridge",
   "remoteUser": "root"
 }

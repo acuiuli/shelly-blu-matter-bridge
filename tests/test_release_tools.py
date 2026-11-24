@@ -22,7 +22,7 @@ class ReleaseTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.source = self.root / "inventory"
         self.source.mkdir()
-        for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "toolchain.lock.json", "dependencies.lock"):
+        for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "toolchain.lock.json", "dependencies.lock", "Dockerfile", "python-tools.lock"):
             (self.source / name).write_text("fixture\n")
         (self.source / "licenses").mkdir()
         (self.source / "licenses/vendor.txt").write_text("fixture license\n")
@@ -57,6 +57,11 @@ class ReleaseTests(unittest.TestCase):
 
     def test_changed_license_is_rejected_without_output(self):
         (self.source / "licenses/vendor.txt").write_text("incorrect license text\n")
+        self.assertNotEqual(self.run_package().returncode, 0)
+        self.assertFalse(self.output.exists())
+
+    def test_missing_toolchain_recipe_is_rejected_without_output(self):
+        (self.source / "Dockerfile").unlink()
         self.assertNotEqual(self.run_package().returncode, 0)
         self.assertFalse(self.output.exists())
 

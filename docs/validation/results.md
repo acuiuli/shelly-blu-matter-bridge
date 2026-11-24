@@ -1,4 +1,10 @@
-# Foundation validation results
+# Validation results
+
+The current SDK upgrade and hardware session are recorded in
+[2026-11-24 board bring-up](2026-11-24-board-bringup.md). The original foundation
+measurements below are historical and use the earlier toolchain.
+
+## Original foundation validation
 
 Recorded **2026-11-10** from the foundation working tree (no release tag). These are
 software/build results only. No board, Thread network, Home Assistant instance or real

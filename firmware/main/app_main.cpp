@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
+#include "ble_diagnostics.h"
 #include "bridge/bridge.hpp"
 #include <app/CommandHandler.h>
 #include <app/data-model/Decode.h>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -35,6 +37,7 @@ static bridge::Engine engine;
 static bridge::Simulator simulator;
 static bridge::Identity identity;
 static bool publishing = false;
+static std::atomic<unsigned> publish_rejections{0};
 static bridge::Time now_ms() { return esp_timer_get_time() / 1000; }
 
 static void load_identity() {
@@ -255,14 +258,19 @@ static int sim_command(int argc, char **argv) {
     return 0;
 }
 static int diagnostic_command(int, char **) {
+    if (!esp_openthread_get_instance()) {
+        std::printf("Thread stack is not initialized\n");
+        return 1;
+    }
     wifi_mode_t wifi_mode;
     bool wifi_uninitialized = esp_wifi_get_mode(&wifi_mode) == ESP_ERR_WIFI_NOT_INIT;
     esp_openthread_lock_acquire(portMAX_DELAY);
     auto *ot = esp_openthread_get_instance();
-    std::printf("Thread role=%u router_eligible=%u heap=%u minimum_heap=%u wifi_uninitialized=%u\n",
+    std::printf("Thread role=%u router_eligible=%u heap=%u minimum_heap=%u wifi_uninitialized=%u "
+                "publish_rejections=%u\n",
                 unsigned(otThreadGetDeviceRole(ot)), unsigned(otThreadIsRouterEligible(ot)),
                 unsigned(esp_get_free_heap_size()), unsigned(esp_get_minimum_free_heap_size()),
-                unsigned(wifi_uninitialized));
+                unsigned(wifi_uninitialized), publish_rejections.load());
     esp_openthread_lock_release();
     return 0;
 }
@@ -305,6 +313,7 @@ extern "C" void app_main() {
     ESP_ERROR_CHECK(node ? ESP_OK : ESP_FAIL);
     create_devices(node);
     ESP_ERROR_CHECK(esp_matter::start(nullptr));
+    ESP_ERROR_CHECK(esp_openthread_get_instance() ? ESP_OK : ESP_FAIL);
     wifi_mode_t wifi_mode;
     ESP_ERROR_CHECK(esp_wifi_get_mode(&wifi_mode) == ESP_ERR_WIFI_NOT_INIT ? ESP_OK : ESP_FAIL);
     // Mark the image healthy only after model and Thread stack initialization.
@@ -332,9 +341,11 @@ extern "C" void app_main() {
     onboarding.help = "Explicitly display PRIVATE development commissioning code over USB";
     onboarding.func = onboarding_command;
     ESP_ERROR_CHECK(esp_console_cmd_register(&onboarding));
+    register_ble_diagnostics();
     ESP_ERROR_CHECK(esp_console_start_repl(repl));
     for (;;) {
-        chip::DeviceLayer::PlatformMgr().ScheduleWork(publish, 0);
+        if (chip::DeviceLayer::PlatformMgr().ScheduleWork(publish, 0) != CHIP_NO_ERROR)
+            publish_rejections.fetch_add(1);
         vTaskDelay(pdMS_TO_TICKS(250));
     }
 }

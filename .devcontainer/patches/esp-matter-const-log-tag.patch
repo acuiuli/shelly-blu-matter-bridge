@@ -1,0 +1,13 @@
+diff --git a/components/esp_matter/esp_matter_icd_configuration.cpp b/components/esp_matter/esp_matter_icd_configuration.cpp
+--- a/components/esp_matter/esp_matter_icd_configuration.cpp
++++ b/components/esp_matter/esp_matter_icd_configuration.cpp
+@@ -25,7 +25,8 @@
+ #include <system/SystemClock.h>
+ 
+ using namespace chip::System::Clock;
+-static constexpr char *TAG = "icd";
++// Modified by Shelly BLU Matter Bridge: const log tag for ESP-IDF 6.1 compatibility.
++static constexpr const char *TAG = "icd";
+ 
+ namespace chip {
+ namespace Testing {

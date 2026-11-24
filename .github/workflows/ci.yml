@@ -1,4 +1,4 @@
-name: CI
+name: Build firmware and run validation tests
 on:
   push:
   pull_request:
@@ -9,41 +9,53 @@ concurrency:
   cancel-in-progress: true
 jobs:
   repository:
-    runs-on: ubuntu-24.04
+    name: Repository policies and release-tool tests
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out repository source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: python3 tools/check_repository.py
-      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Validate repository policies and documentation references
+        run: python3 tools/check_repository.py
+      - name: Test release-bundle validation and checksum protection
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
   dco:
+    name: DCO author sign-offs
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out repository source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - run: python3 tools/check_dco.py
+      - name: Verify each PR commit has the author’s DCO sign-off
+        run: python3 tools/check_dco.py
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
   prototype:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    name: ESP32-S3 and H2 builds, simulator tests, and dependency audit
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out repository source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Make space for the official SDK image on the disposable runner
+      - name: Free runner disk space for the pinned development container
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
-      - run: ./tools/dev.sh python3 tools/check_toolchain.py
-      - run: ./tools/dev.sh bash tools/format.sh --check
-      - name: Host behavior tests
+      - name: Verify pinned development-container SDK revisions
+        run: ./tools/dev.sh python3 tools/check_toolchain.py
+      - name: Check C++ source formatting
+        run: ./tools/dev.sh bash tools/format.sh --check
+      - name: Build and test the four-TRV reconciliation simulator
         run: ./tools/dev.sh bash -c 'cmake -S . -B build/host -G Ninja && cmake --build build/host && ctest --test-dir build/host --output-on-failure'
       - name: ESP32-S3 firmware compilation
         run: ./tools/dev.sh idf.py -C firmware set-target esp32s3 build
-      - run: ./tools/dev.sh python3 tools/check_firmware_config.py
+      - name: Verify resolved Thread, BLE, Wi-Fi, and OTA configuration
+        run: ./tools/dev.sh python3 tools/check_firmware_config.py
       - name: Matched H2 RCP compilation
         run: ./tools/dev.sh bash tools/build_rcp.sh
       - name: Dependency lock is reproducible
@@ -51,7 +63,7 @@ jobs:
       - name: Dependency and notice inventory (local artifact only)
         run: ./tools/dev.sh python3 tools/dependency_inventory.py build/dependency-review
       - name: Retain dependency review evidence (contains no firmware images)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dependency-review
           path: build/dependency-review

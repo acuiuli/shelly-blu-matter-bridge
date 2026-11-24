@@ -96,13 +96,18 @@ for target, link_map in maps:
         archives.append({"target": target, "path": raw, "sha256": sha(p) if p.exists() else None,
                          "notice_review": "required"})
     shutil.copyfile(link_map, out / link_map.name)
-for p in (Path("LICENSE"), Path("THIRD_PARTY_NOTICES.md"), Path("firmware/dependencies.lock"), Path("tools/toolchain.lock.json")):
+for p in (Path("LICENSE"), Path("THIRD_PARTY_NOTICES.md"), Path("firmware/dependencies.lock"), Path("tools/toolchain.lock.json"),
+          Path(".devcontainer/Dockerfile"), Path(".devcontainer/python-tools.lock")):
     shutil.copyfile(p, out / p.name)
+for patch in lock.get("patches", []):
+    target = out / "patches" / Path(patch["path"]).name
+    target.parent.mkdir(exist_ok=True)
+    shutil.copyfile(patch["path"], target)
 report = {"schema": 1, "toolchain": lock, "sdks": sdks, "registry_components": components,
           "application": {"path": "firmware/build/shelly_blu_bridge.bin",
                           "sha256": sha(Path("firmware/build/shelly_blu_bridge.bin"))},
           "build_components": project["build_components"], "loaded_archives": archives,
-          "license_files": licenses, "modifications": "No vendor source changes; application CMake explicitly selects esp_http_client",
+          "license_files": licenses, "modifications": "Official Matter container extended with pinned ESP-IDF source/tool and Python environment updates; ESP-Matter const log-tag patch recorded in toolchain lock",
           "license_review_complete": False,
           "remaining_review": ["Verify all linked transitive components and embedded headers against notices",
                                "Review distributed binary-library and compiler runtime license obligations",

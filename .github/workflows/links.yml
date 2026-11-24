@@ -1,4 +1,4 @@
-name: External links
+name: Check documentation URLs for broken links
 on:
   workflow_dispatch:
   schedule:
@@ -7,10 +7,13 @@ permissions:
   contents: read
 jobs:
   links:
-    runs-on: ubuntu-24.04
+    name: Validate public URLs in Markdown documentation
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out repository source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: python3 tools/check_links.py
+      - name: Check documentation URLs for HTTP 404 and 410 responses
+        run: python3 tools/check_links.py

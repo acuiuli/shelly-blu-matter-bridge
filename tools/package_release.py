@@ -27,7 +27,7 @@ if sha(app) != report["application"]["sha256"]:
     raise SystemExit("Application changed after inventory collection")
 if not ota.is_file() or ota.suffix != ".ota":
     raise SystemExit("Supply the reviewed Matter OTA wrapper (.ota)")
-for required in ("LICENSE", "THIRD_PARTY_NOTICES.md", "toolchain.lock.json", "dependencies.lock", "SHA256SUMS"):
+for required in ("LICENSE", "THIRD_PARTY_NOTICES.md", "toolchain.lock.json", "dependencies.lock", "Dockerfile", "python-tools.lock", "SHA256SUMS"):
     if not (source / required).is_file():
         raise SystemExit(f"Inventory is missing {required}")
 if not (source / "licenses").is_dir() or not any((source / "licenses").rglob("*")):
