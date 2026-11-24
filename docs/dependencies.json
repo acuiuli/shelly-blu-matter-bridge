@@ -738,7 +738,7 @@
   ],
   "application": {
     "path": "firmware/build/shelly_blu_bridge.bin",
-    "sha256": "6e3f68b8470b7ad24195b957572c7b3078365abf034cc1a5cb99be12fca88c9e"
+    "sha256": "ecb4101565e4686e1b3ba4bcf4afd73b80c715f9956acf4ccee634fda02811b7"
   },
   "build_components": [
     "app_update",
@@ -948,7 +948,7 @@
     {
       "target": "esp32s3",
       "path": "esp-idf/bridge_core/libbridge_core.a",
-      "sha256": "416f8d218870a35c4ef19b44a57e94ba99a8a5b16e3ab3cfcbac9e452158c137",
+      "sha256": "1046ba42798dca550d1356b8976a52f59e683039d73279944f28510262ae3445",
       "notice_review": "required"
     },
     {
@@ -1350,7 +1350,7 @@
     {
       "target": "esp32s3",
       "path": "esp-idf/main/libmain.a",
-      "sha256": "8441003412de247af023f1cdbdda74cdf6f62a58651a7842ada6de61b6f09ec8",
+      "sha256": "564370ae6181965181e3d763d39ef797bc7be9c7eefc05e49b028ab674aa7276",
       "notice_review": "required"
     },
     {
@@ -1392,7 +1392,7 @@
     {
       "target": "esp32s3",
       "path": "esp-idf/openthread/libopenthread.a",
-      "sha256": "456950f24051c6d3d5c6e456f4388b95502e4416f6918fe4a39038bfdd711fc4",
+      "sha256": "2a82bf2b3e99953ce493a7ae0dbbdd2115fbfc1c7680c4ea72fe27f5eb83f130",
       "notice_review": "required"
     },
     {

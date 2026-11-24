@@ -4,6 +4,10 @@ The current SDK upgrade and hardware session are recorded in
 [2026-11-24 board bring-up](2026-11-24-board-bringup.md). The original foundation
 measurements below are historical and use the earlier toolchain.
 
+The [first real-TRV report](2026-11-24-real-trv-read.md) records discovery and a
+direct read of one installed 1.5.0 valve while the bridge remained a Thread router.
+Persistent bonds, real Matter telemetry and valve movement remain pending.
+
 ## Original foundation validation
 
 Recorded **2026-11-10** from the foundation working tree (no release tag). These are

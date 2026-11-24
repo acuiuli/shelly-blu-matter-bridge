@@ -2,7 +2,9 @@
 
 The [vendor BLU TRV documentation](https://shelly-api-docs.shelly.cloud/docs-ble/Devices/BLU_ZB/trv/)
 describes periodic BTHome observations and bonded GATT access. The real transport
-is not implemented. Do not confuse older Wi-Fi Shelly TRVs with the BLU model, or
+is not implemented. Bounded discovery and a non-bonding read-only GATT probe are
+available; see [one-valve bring-up](real-trv-bringup.md) and the
+[first direct read](validation/2026-11-24-real-trv-read.md). Do not confuse older Wi-Fi Shelly TRVs with the BLU model, or
 `BluTrv.Call` on a Shelly gateway with a direct valve RPC.
 
 | Operation | Characteristic UUID | Investigate |

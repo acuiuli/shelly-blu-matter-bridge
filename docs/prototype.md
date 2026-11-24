@@ -92,13 +92,15 @@ controller acceptance testing. No heating algorithm runs in the gateway.
 
 ## Limitations
 
-Real discovery, enrollment, GATT/BTHome decoding, bonding, calibration, external
-sensor input and TRV updates are not implemented. NimBLE central/observer support
-is configured. Run `ble_scan 10`, wait ten seconds, then `ble_scan status` before
+Bounded real-device discovery and a read-only GATT probe are available through
+`trv_discover` and `trv_probe`; see [first real TRV](real-trv-bringup.md). Enrollment,
+BTHome telemetry decoding, persistent bonding, motor commands, calibration, external
+sensor input and TRV updates are not implemented. Run `ble_scan 10`, wait ten seconds, then `ble_scan status` before
 and after commissioning. It reports synchronization, completion, advertisement counts
 and RSSI bounds without addresses or payloads. Receiving advertisements proves scanning;
-real GATT connections and bonding need separate tests. Post-commission scanning must
-still be validated on hardware.
+the first direct GATT connection/read has passed for an installed 1.5.0 valve.
+Persistent bonding and control remain separate tests. Scanning after commissioning
+has passed on the reference board.
 USB supports simulator configuration, bounded passive BLE scans and diagnostics; secure real-valve
 enrollment is a subsequent milestone. Default development credentials, security
 hardening, full conformance testing, and real OTA rollback qualification remain open.

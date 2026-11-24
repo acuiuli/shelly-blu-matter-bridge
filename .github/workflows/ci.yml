@@ -50,7 +50,7 @@ jobs:
         run: ./tools/dev.sh python3 tools/check_toolchain.py
       - name: Check C++ source formatting
         run: ./tools/dev.sh bash tools/format.sh --check
-      - name: Build and test the four-TRV reconciliation simulator
+      - name: Test simulator reconciliation and Shelly advertisement/readback decoding
         run: ./tools/dev.sh bash -c 'cmake -S . -B build/host -G Ninja && cmake --build build/host && ctest --test-dir build/host --output-on-failure'
       - name: ESP32-S3 firmware compilation
         run: ./tools/dev.sh idf.py -C firmware set-target esp32s3 build

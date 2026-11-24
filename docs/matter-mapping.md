@@ -2,7 +2,9 @@
 
 Every row is required for a full-parity release. “Candidate” means the proposed standard
 mapping still requires a specification and controller check. **No row has hardware
-acceptance evidence yet.** Status of software-only tests is in [results](validation/results.md).
+end-to-end acceptance evidence yet.** A [read-only real-valve probe](validation/2026-11-24-real-trv-read.md)
+has validated selected downstream reads; these are not yet fed into Matter.
+Simulator and controller evidence is in [results](validation/results.md).
 The scope is the function list agreed for the current device page, not every vendor
 schedule/display feature. Freeze a sanitized inventory of the installed device page
 before parity sign-off; expand this matrix if it reveals another required function.
@@ -10,10 +12,10 @@ before parity sign-off; expand this matrix if it reveals another required functi
 | Required function | Shelly BLE operation to verify | Legitimate standard Matter candidate | HA representation / acceptance test | Status |
 | --- | --- | --- | --- | --- |
 | Measured temperature | Validated BTHome temperature | Thermostat.LocalTemperature, °C ×100 | Climate current temperature; manual/device change propagates without synthesis | Simulated |
-| Target temperature | Bonded target GATT / TRV.SetTarget | OccupiedHeatingSetpoint | Climate target; readback matches, range/units checked | Simulated |
+| Target temperature | Bonded target GATT / TRV.SetTarget | OccupiedHeatingSetpoint | Climate target; readback matches, range/units checked | Real GATT read/units passed; real writes/Matter telemetry pending |
 | Control mode | Enabled-functions flags / vendor configuration | Thermostat.SystemMode only for matching Off/Heat semantics | Climate mode; prove direct-control mode survives commands/restarts; Off must not imply physical closure | Blocked semantics |
 | Direct percentage command | Bonded position GATT; automatic control disabled | Valve Configuration and Control Open(targetLevel), Close; Level feature | Valve set position; 0/50/100 applied and confirmed | Simulated; conformance gate |
-| Confirmed percentage feedback | Position readback / validated telemetry | CurrentLevel separate from TargetLevel | current_position remains actual during delays/failures | Host tests; hardware pending |
+| Confirmed percentage feedback | Position readback / validated telemetry | CurrentLevel separate from TargetLevel | current_position remains actual during delays/failures | Direct GATT 0% read passed; post-movement/real Matter feedback pending |
 | Battery | Validated BTHome/device telemetry | Power Source.BatPercentRemaining, units 0.5% | Battery sensor; test 0, 50, 100 and unknown | Simulated |
 | Availability | Freshness and transport observations | Bridged Device Basic Information.Reachable | Parent and children unavailable after timeout; independently recover | Host tests; HA pending |
 | External temperature input | Bonded external-temperature GATT | **Unresolved writable standard interface**; LocalTemperature is reported data, not an external sensor command | Need legitimate controller service and confirmed input effect | **Release blocker** |
