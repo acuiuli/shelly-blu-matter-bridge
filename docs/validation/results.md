@@ -8,6 +8,11 @@ The [first real-TRV report](2026-11-24-real-trv-read.md) records discovery and a
 direct read of one installed 1.5.0 valve while the bridge remained a Thread router.
 Persistent bonds, real Matter telemetry and valve movement remain pending.
 
+The [2026-11-25 enrollment preparation](2026-11-25-enrollment-preparation.md)
+adds persistent peer reservations, SDK bond storage and an explicit USB valve-only
+configuration command. Host checks and non-mutating board guards pass; real
+pairing, regulator writes, bond retention and Matter binding remain pending.
+
 ## Original foundation validation
 
 Recorded **2026-11-10** from the foundation working tree (no release tag). These are

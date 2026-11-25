@@ -41,8 +41,11 @@ Flash only after the two serial devices have been identified without ambiguity.
 
 No Thread dataset or bonding secret should be entered into an issue or committed.
 The normal path provisions Thread credentials over Matter commissioning. USB is the
-local path for flashing, simulator configuration and diagnostics; future real enrollment
-must also use USB and persist secure bindings. No production enrollment command exists.
+local path for flashing, configuration and diagnostics. Experimental direct BLE
+enrollment and explicit valve-only setup are described in [one-valve bring-up](real-trv-bringup.md).
+They require physical pairing mode and real-device validation; the Matter endpoints
+remain simulated. The intended new-valve flow requires no Shelly app/account or
+gateway and no second Matter commissioning of each downstream BLE valve.
 
 ## Development certificate trust
 

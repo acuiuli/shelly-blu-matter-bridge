@@ -35,7 +35,7 @@ architectures concurrently.
 | Device communication | `bridge::Simulator` | Replace with asynchronous BLE transport; one transaction per TRV; validate frames before observations |
 | Reconciliation | `bridge::Engine` | Commands carry monotonic expiry and generation token; telemetry is authoritative |
 | Matter representation | `firmware/main/app_main.cpp` | Standard clusters; callbacks enqueue intent, periodic owner task publishes observations |
-| Persistence | Separate `bridge_store` NVS partition | Schema/version and gateway identity; no command persistence |
+| Persistence | Separate `bridge_store` NVS identity/binding partition; SDK NimBLE NVS keys | Versioned physical-peer reservations; no command persistence |
 | Diagnostics | USB `diag`, simulator injection | No dataset, PIN, bonding keys or credential logs |
 
 The core has no SDK dependency, radio assumptions or heating controller. This small
@@ -73,6 +73,13 @@ A random 128-bit gateway identity is stored once in a dedicated NVS partition. S
 slot ids derive from it, so gateways differ. Creation order is checked against reserved
 endpoint ids. Matter fabric changes and S3 OTA do not intentionally erase that partition.
 Hardware tests must prove this, including default SDK factory reset behavior. Factory
-flash erasure destroys identity. A future USB enrollment table must persist physical
-TRV-to-slot bindings, reject duplicates and never recycle a removed slot silently.
-The prototype reserves all four slots for simulators; it does not enroll real valves.
+flash erasure destroys identity. The experimental USB enrollment table reserves
+physical peer/slot bindings and independent random enrollment identities, rejects
+duplicates and never replaces a nonempty slot with a different peer. Its schema and
+lengths are explicitly serialized; BLE keys remain in the SDK's NVS store. A pending
+reservation survives interrupted pairing. Promotion requires encrypted bonded access
+and validated reads. Removal/replacement lifecycle support remains pending.
+
+The four Matter slots still represent simulators. Stored physical identities are not
+yet applied to Matter endpoints. Real binding must prevent simulator identity reuse
+and prove downstream discovery after the bridge has already been commissioned.

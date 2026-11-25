@@ -3,7 +3,7 @@
 An **experimental**, Apache-2.0 gateway prototype for Shelly BLU TRVs: **Matter over
 Thread upstream, BLE downstream**, on the Espressif ESP32-S3 + ESP32-H2 Main Board.
 The first deliverable is a foundation and simulator. **Full replacement feasibility
-has not been established. Real TRV communication is not implemented.**
+has not been established. Real TRV control through Matter is not implemented.**
 
 **Publication gate:** keep this repository private until a working MVP has been
 validated. The current software-only foundation does not pass that gate.
@@ -42,6 +42,7 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 | Thread FTD without Wi-Fi | S3 host / H2 UART RCP | Build configuration and runtime setup | Commissioned in HA, elected Thread router; Wi-Fi uninitialized |
 | BLE after commissioning | NimBLE central/observer | Scan diagnostics and bounded GATT read probe | Post-HA scanning and one real TRV read while Thread router; persistent enrollment/control pending |
 | Real TRV discovery/read | Shelly manufacturer metadata and direct GATT | Bounded USB discovery and non-bonding read probe | Six candidates; one installed 1.5.0 valve read; enrollment/control pending |
+| Direct enrollment and valve-only setup | USB configuration, bonded GATT | Persistent peer reservations/bonds; explicit regulator-disable command with readback | Host storage/bitmask tests and non-mutating board guards; real pairing/configuration and HA binding pending |
 | Gateway OTA | Matter OTA Requestor | Enabled; two S3 slots and boot rollback check | Installation/rollback pending |
 | Maintenance and TRV updates | Standard mappings under investigation | Documentation only | Release blockers |
 

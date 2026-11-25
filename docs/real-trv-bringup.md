@@ -1,9 +1,31 @@
 # First real TRV: staged bring-up
 
 Start with one identified valve while retaining its vendor firmware and a recovery
-path through the original gateway. The current firmware supports discovery and a
-read-only GATT probe. It does not enroll a valve persistently, write its settings
-or feed real telemetry into the Matter endpoints. The four HA devices remain simulators.
+path. The firmware provides discovery, a read-only GATT probe, experimental persistent
+BLE enrollment and an explicit valve-only configuration command. Enrollment and
+configuration still require real-device validation. Real telemetry/control are not
+connected to Matter: the four HA devices remain simulators.
+
+## Intended onboarding without the Shelly app
+
+Commission the bridge into HA once using Matter. Enroll each BLE TRV directly with
+the bridge over private USB, using the TRV's physical pairing mode. No Shelly account,
+app or vendor gateway is a prerequisite for that intended flow. HA will receive the
+real thermostat/valve/battery through the existing Matter bridge, without a separate
+Matter pairing code for each BLE valve. This final step is not implemented yet.
+
+Initial setup must offer **valve-only control** explicitly. Selecting it disables the
+TRV's automatic temperature regulator over BLE and verifies the setting on the valve.
+HA then controls percentage opening. Creating an HA valve entity alone does not
+disable Shelly's regulator. Thermostat `SystemMode` has not been established as a
+legitimate mapping for this flag; do not manufacture an HA switch or repurpose a
+standard attribute. USB setup does not resolve the full-parity Matter mapping gate.
+
+The prototype reserves four simulated slots. Promoting one slot to a real device,
+correct physical-device identity and HA discovery after the bridge has already been
+commissioned require separate implementation and acceptance. A stored enrollment
+identity must not silently inherit a simulator's physical identity or be reassigned
+to a different valve.
 
 ## 1. Identify and record the baseline
 
@@ -55,23 +77,101 @@ Reads normalize target temperature to centidegrees Celsius and validate lengths
 and ranges. Function/error bitmasks remain raw diagnostics, not invented Matter faults.
 Read success is not proof that a prior movement command completed.
 
-## 3. Implement secure enrollment and persistent recovery
+## 3. Enroll and verify persistent recovery
 
-Before enabling writes, implement a selected-peer enrollment flow, the needed
-authenticated BLE access and persistent bond storage. Retain the original peer
-and verify capacity first: Shelly documents four paired peers and eviction of the
+For an installed valve, retain the original peer and verify capacity first: Shelly
+documents four paired peers and eviction of the
 least-used peer when adding another beyond that limit. See
 [pairing behavior](https://shelly-api-docs.shelly.cloud/docs-ble/common/#pairing).
-Do not factory-reset an installed valve as an enrollment shortcut.
+Do not reset an installed valve merely to fix a pairing failure.
 
-The current prototype has NimBLE NVS bond persistence disabled and a three-bond
-local default. Those settings are insufficient for the four-real-TRV target.
-Complete storage, capacity and credential-redaction work before motor commands;
-production at-rest protection remains part of the [security work](../SECURITY.md).
+The TRV-specific vendor instructions describe a **single short press** of the reset
+button beside the battery cover for BLE pairing. A hold longer than 30 seconds is
+a factory reset, not the normal enrollment action. Follow the exact model's
+[instructions](https://shelly-api-docs.shelly.cloud/docs-ble/Devices/BLU_ZB/trv/).
+After physical pairing mode is active:
+
+```text
+trv_discover 10
+trv_discover status
+trv_enroll 0 SESSION:INDEX
+trv_enroll status
+trv_reconnect 0
+trv_reconnect status
+```
+
+Choose the anonymous `SESSION:INDEX` token printed by the latest discovery for
+the physically selected TRV in pairing mode. No MAC lookup through a Shelly gateway
+is required. A known private MAC is also accepted for migration diagnostics.
+Wait for discovery to finish and each operation to reach `state=done`. Successful
+enrollment requires `result=0`, encrypted/bonded access and all five reads passing,
+including errors. It reserves a private slot identity before pairing, persists BLE
+keys using the SDK's existing NimBLE NVS store, and marks the slot verified only
+after those reads. Eight local bond slots accommodate four TRVs and headroom.
+Full local stores fail rather than deliberately evicting another peer. This cannot
+protect an already-full peer list on the TRV; verify its capacity separately.
+
+Pending reservations survive failure/reboot. A pending slot with stored keys can be
+recovered with `trv_reconnect`; otherwise retry `trv_enroll` for the same peer after
+reopening its pairing mode. Another peer cannot replace it. Removal/replacement
+lifecycle commands are not implemented. Corrupt/unknown storage schemas fail visibly;
+no keys, fabrics or identity partitions are automatically erased.
+
+The first implementation accepts public/static addresses and unencrypted devices
+in pairing mode using BLE Just Works. This produces an encrypted bond, **not MITM
+authentication**. PIN/passkey-protected enrollment and rotating-address enrollment
+are not implemented; passkey requests abort. Do not weaken an existing device's
+security to make enrollment pass. Reconnect/configuration require an existing LTK
+and never intentionally repair or delete stale bonds.
+
 Verify encrypted reconnect after S3 restart and TRV battery replacement before
-depending on the new gateway. Keep keys and passkeys outside source and ordinary logs.
+depending on the bridge. Keep all console captures and identifiers private. Production
+at-rest protection remains part of the [security work](../SECURITY.md).
 
-## 4. Bind one slot, then prove control
+## 4. Configure valve-only control explicitly
+
+After enrollment and encrypted bonded access have been validated:
+
+```text
+trv_valve_only 0
+trv_valve_only status
+```
+
+This command reads the current enabled-functions bitmask, clears only bit 0
+(`enable`, automatic temperature control), writes that characteristic if needed,
+and reads it back. It succeeds only when the complete mask matches the intended
+value, preserving all other known/unknown bits. If already off, it makes no write.
+It does not send a position, setpoint or calibration command. BLE write acceptance
+alone is not confirmation that configuration persisted or a valve moved.
+
+Repeat the read after S3 restart and TRV battery replacement. Later position control
+must refuse writes while automatic temperature control is enabled or its state is
+unknown; it must never change this setting implicitly. A TRV reset or another writer
+can change it. Coordinate existing writers during configuration/control validation.
+
+## 5. Test a reset valve without app registration
+
+This is a required acceptance test, separate from migrating an already-paired valve.
+Removing an HA device or a Shelly app entry is not proof that BLE bonds were cleared.
+The TRV's RPC `Shelly.FactoryReset` is documented to preserve pairing information;
+do not substitute that for a verified physical clean start.
+
+Keep the current installed-valve baseline and cover its heating/boiler automations
+before resetting. Prepare and verify bridge enrollment first. Then remove only the
+selected old integration/device, leave this Matter bridge commissioned, and perform
+the model's documented physical reset. Record what was actually cleared, default
+control mode, calibration and settings. Re-enroll directly without registering in
+Shelly, explicitly select valve-only control, and prove encrypted reconnect/configuration
+retention after power cycles. A reset, previously registered valve validates that
+scenario; a never-registered factory-new valve remains a separate acceptance case.
+
+For the complete test, bind real telemetry and control, verify HA sees the actual
+valve through the already-commissioned bridge, and confirm bounded movement by
+fresh readback. Verify operation with no vendor gateway assisting the test valve;
+do not disconnect a gateway still needed for the other installed valves. The current
+enrollment commands do not satisfy these Matter/control acceptance steps.
+
+## 6. Bind one slot, then prove control
 
 Bind only the selected valve to a reserved slot, preserving Matter identity and
 the other slots. Replace simulated observations only when real fields are known;

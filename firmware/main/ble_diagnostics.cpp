@@ -148,7 +148,7 @@ int scan_command_impl(int argc, char **argv, bool identify_trvs) {
         return 1;
     }
     if (trv_gatt_probe_active()) {
-        std::printf("TRV read probe is in progress\n");
+        std::printf("TRV BLE operation is in progress\n");
         return 1;
     }
     bool expected = false;
@@ -203,17 +203,38 @@ int discover_command(int argc, char **argv) { return scan_command_impl(argc, arg
 } // namespace
 
 bool ble_diagnostic_scan_active() { return running.load(); }
-bool find_discovered_trv(const uint8_t address[6], ble_addr_t &peer) {
+bool find_discovered_trv(const uint8_t address[6], ble_addr_t &peer, bool pairing_required) {
     auto now = uint64_t(esp_timer_get_time() / 1000);
     unsigned matches = 0;
     portENTER_CRITICAL(&candidate_lock);
     for (const auto &entry : candidates)
         if (entry.used && now - entry.seen_ms <= 120000 && std::memcmp(entry.address.val, address, 6) == 0) {
-            peer = entry.address;
-            ++matches;
+            // Initial enrollment supports unencrypted/Just Works devices only.
+            // Do not downgrade security or guess a PIN for an encrypted valve.
+            if (pairing_required &&
+                (!entry.flags || !(*entry.flags & (1 << 4)) || (*entry.flags & (1 << 1)))) {
+                matches += 2; // reject ambiguous/stale security advertisements
+            } else {
+                peer = entry.address;
+                ++matches;
+            }
         }
     portEXIT_CRITICAL(&candidate_lock);
     return matches == 1;
+}
+bool find_discovered_trv_candidate(unsigned session, unsigned index, ble_addr_t &peer) {
+    const auto now = uint64_t(esp_timer_get_time() / 1000);
+    bool found = false;
+    portENTER_CRITICAL(&candidate_lock);
+    if (session == scan_session && index < candidates.size()) {
+        const auto &entry = candidates[index];
+        found = entry.used && now - entry.seen_ms <= 120000 && entry.flags && (*entry.flags & (1 << 4)) &&
+                !(*entry.flags & (1 << 1));
+        if (found)
+            peer = entry.address;
+    }
+    portEXIT_CRITICAL(&candidate_lock);
+    return found;
 }
 
 void register_ble_diagnostics() {

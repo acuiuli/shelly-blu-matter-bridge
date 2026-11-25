@@ -2,7 +2,8 @@
 
 The [vendor BLU TRV documentation](https://shelly-api-docs.shelly.cloud/docs-ble/Devices/BLU_ZB/trv/)
 describes periodic BTHome observations and bonded GATT access. The real transport
-is not implemented. Bounded discovery and a non-bonding read-only GATT probe are
+is not connected to Matter. Bounded discovery, a non-bonding read-only GATT probe,
+experimental persistent enrollment and explicit valve-only configuration are
 available; see [one-valve bring-up](real-trv-bringup.md) and the
 [first direct read](validation/2026-11-24-real-trv-read.md). Do not confuse older Wi-Fi Shelly TRVs with the BLU model, or
 `BluTrv.Call` on a Shelly gateway with a direct valve RPC.
@@ -13,8 +14,14 @@ available; see [one-valve bring-up](real-trv-bringup.md) and the
 | Position | `c3020a1d-f05b-4430-b2e9-f97df761c33b` | Percentage; writes require automatic temperature control disabled |
 | Calibration | `6db6f15e-43d6-425e-8669-5b449ab08250` | Start and completion/error semantics |
 | External temperature | `5cb70992-381e-4c21-84d8-b7fd1173597e` | Units, validity lifetime and fallback |
-| Enabled functions | `7ff16da2-6f68-4dc6-a97a-bee89d36e739` | Read/modify/write preserving unrelated flags |
+| Enabled functions | `7ff16da2-6f68-4dc6-a97a-bee89d36e739` | `trv_valve_only` explicitly clears bit 0, preserving unrelated flags and verifying full readback; hardware validation pending |
 | Errors | `00a347f9-4a0a-4ad4-a2d5-1cc01f9b3fe8` | Decode only documented flags |
+
+USB enrollment uses the SDK's existing NVS bond store and a separate versioned
+physical-peer reservation. Initial Just Works enrollment does not claim MITM
+authentication. PIN-protected devices are rejected. Mode configuration requires a
+verified binding and encrypted bonded access; it never changes mode as an implicit
+side effect of a percentage command. No position/setpoint writes exist yet.
 
 First prove one valve can bond, read, write and reconnect with the original gateway
 powered off. Store bonding material in secure device storage and keep it out of ordinary

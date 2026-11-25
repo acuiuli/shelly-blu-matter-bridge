@@ -738,7 +738,7 @@
   ],
   "application": {
     "path": "firmware/build/shelly_blu_bridge.bin",
-    "sha256": "ecb4101565e4686e1b3ba4bcf4afd73b80c715f9956acf4ccee634fda02811b7"
+    "sha256": "ddbb4e115feff3942c48f2fbadd18e140b79d80e2df52aa8dcb3f548e542dccc"
   },
   "build_components": [
     "app_update",
@@ -948,13 +948,13 @@
     {
       "target": "esp32s3",
       "path": "esp-idf/bridge_core/libbridge_core.a",
-      "sha256": "1046ba42798dca550d1356b8976a52f59e683039d73279944f28510262ae3445",
+      "sha256": "6b81a5a76f77a41871ecb34d059588feccbce153b5c9f030d394350b683534c8",
       "notice_review": "required"
     },
     {
       "target": "esp32s3",
       "path": "esp-idf/bt/libbt.a",
-      "sha256": "98b023c75358f95f963509e3e844fe660dbade6731c8a380721437d893956582",
+      "sha256": "fba6e27e6ace34f2bf55051824a2d2efb676506e6397b4d6d3cd27bfb4732e60",
       "notice_review": "required"
     },
     {
@@ -996,13 +996,13 @@
     {
       "target": "esp32s3",
       "path": "esp-idf/esp_app_format/libesp_app_format.a",
-      "sha256": "67beb43b0285ba3f86fbe46366dc38fed9abdaa0af83ca6d1f12d6a02bb823ec",
+      "sha256": "a209ec119825920577a24bc5130aa72fa7fe7708b5e3d6cb8edf89869d0bc66c",
       "notice_review": "required"
     },
     {
       "target": "esp32s3",
       "path": "esp-idf/esp_bootloader_format/libesp_bootloader_format.a",
-      "sha256": "903c0bcb6d411f7ebe3fb8d9fb67c2ac3797531541d6d82d1a8f6cda587234c2",
+      "sha256": "63f4cecab219ad2d770197c09285f2ec9c96b12c9bbfabbe7400945c8132d8e3",
       "notice_review": "required"
     },
     {
@@ -1350,7 +1350,7 @@
     {
       "target": "esp32s3",
       "path": "esp-idf/main/libmain.a",
-      "sha256": "564370ae6181965181e3d763d39ef797bc7be9c7eefc05e49b028ab674aa7276",
+      "sha256": "8f0432b649299447d109bc3748e18d93c1c8d4181c1939fac62380baeb7ffe44",
       "notice_review": "required"
     },
     {
@@ -1392,7 +1392,7 @@
     {
       "target": "esp32s3",
       "path": "esp-idf/openthread/libopenthread.a",
-      "sha256": "2a82bf2b3e99953ce493a7ae0dbbdd2115fbfc1c7680c4ea72fe27f5eb83f130",
+      "sha256": "a79278428720ddd8e957473692a87a211a150b9ea1ef23cc50244044ca7bbaa3",
       "notice_review": "required"
     },
     {

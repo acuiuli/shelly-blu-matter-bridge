@@ -19,6 +19,15 @@ latency p50/p95/max, memory free/minimum, reconnect time, stale duration, S3/H2 
 reasons and manual interventions. Set numeric service objectives after initial real
 measurements; do not invent a single timeout for all BLE operations.
 
+Gate 3 includes direct onboarding without a Shelly app/account or vendor gateway:
+test a reset previously registered valve and separately a never-registered new valve.
+Verify physical reset semantics rather than assuming app/HA deletion erased bonds.
+Leave the Matter bridge commissioned, enroll through USB, explicitly configure
+valve-only control, and verify real child discovery in HA. Prove the regulator flag
+survives S3 restart/TRV battery replacement, that other bits are preserved, and that
+position control refuses an enabled/unknown regulator. A protected read failure must
+not become an invented clear status. See the [test procedure](../real-trv-bringup.md).
+
 Test absent/out-of-range valve, batteries removed/replaced, stale/invalid packets,
 manual ring changes during delayed commands, rapid target replacement, gateway/HA/BR
 restart, RCP reset, topology role changes, interrupted S3 and TRV updates, and retained

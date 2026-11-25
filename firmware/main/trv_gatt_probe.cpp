@@ -1,18 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "trv_gatt_probe.h"
 #include "ble_diagnostics.h"
+#include "bridge/enrollment.hpp"
 #include "bridge/trv_readback.hpp"
+#include "trv_binding_store.h"
+#include <algorithm>
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <esp_console.h>
+#include <esp_random.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <host/ble_gap.h>
 #include <host/ble_gatt.h>
 #include <host/ble_hs.h>
 #include <host/ble_hs_id.h>
+#include <host/ble_store.h>
+#include <limits>
 #include <nimble/nimble_port.h>
 #include <os/os_mbuf.h>
 
@@ -22,14 +30,20 @@ const char *names[] = {"target_centi_c", "position", "calibration", "functions",
 const char *uuids[] = {"4936d0ba-ff05-472c-907b-6551898fc016", "c3020a1d-f05b-4430-b2e9-f97df761c33b",
                        "6db6f15e-43d6-425e-8669-5b449ab08250", "7ff16da2-6f68-4dc6-a97a-bee89d36e739",
                        "00a347f9-4a0a-4ad4-a2d5-1cc01f9b3fe8"};
-enum class Phase { idle, queued, connecting, services, reading, disconnecting, done };
-const char *phases[] = {"idle", "queued", "connecting", "services", "reading", "disconnecting", "done"};
+enum class Phase { idle, queued, connecting, security, services, reading, configuring, disconnecting, done };
+const char *phases[] = {"idle",    "queued",      "connecting",    "security", "services",
+                        "reading", "configuring", "disconnecting", "done"};
+enum class Operation { probe, enroll, reconnect, valve_only };
+const char *operations[] = {"probe", "enroll", "reconnect", "valve_only"};
 struct Snapshot {
     Phase phase = Phase::idle;
     int result = 0;
     std::array<std::optional<int>, field_count> values;
     std::array<int, field_count> status;
     uint64_t elapsed_ms = 0;
+    Operation operation = Operation::probe;
+    int slot = -1;
+    bool encrypted = false, bonded = false, authenticated = false;
 };
 Snapshot snapshot;
 portMUX_TYPE snapshot_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -49,6 +63,37 @@ bool bonding_overridden = false;
 bool stopping = false;
 uint8_t saved_bonding = 0;
 uint64_t started_ms = 0;
+Operation operation = Operation::probe;
+size_t selected_slot = 0;
+bridge::Enrollment bindings;
+bool secured = false;
+uint16_t expected_functions = 0;
+
+bool peer_has_key(const ble_addr_t &address) {
+    ble_store_key_sec key{};
+    key.peer_addr = address;
+    ble_store_value_sec value{};
+    const int result = ble_store_read_peer_sec(&key, &value);
+    bool found = result == 0 && value.ltk_present && value.key_size == 16;
+    // Key bytes stay local to this lookup and are never returned or logged.
+    volatile uint8_t *bytes = reinterpret_cast<volatile uint8_t *>(&value);
+    for (size_t i = 0; i < sizeof(value); ++i)
+        bytes[i] = 0;
+    return found;
+}
+bool secure_peer() {
+    ble_gap_conn_desc desc{};
+    if (ble_gap_conn_find(connection, &desc) || !desc.sec_state.encrypted || !desc.sec_state.bonded ||
+        desc.sec_state.key_size != 16 || (desc.peer_id_addr.type & 1) != peer.type ||
+        std::memcmp(desc.peer_id_addr.val, peer.val, 6) || !peer_has_key(peer))
+        return false;
+    portENTER_CRITICAL(&snapshot_lock);
+    snapshot.encrypted = desc.sec_state.encrypted;
+    snapshot.bonded = desc.sec_state.bonded;
+    snapshot.authenticated = desc.sec_state.authenticated;
+    portEXIT_CRITICAL(&snapshot_lock);
+    return true;
+}
 
 void phase(Phase value) {
     portENTER_CRITICAL(&snapshot_lock);
@@ -88,6 +133,73 @@ void disconnect(int result) {
     }
 }
 void next_read();
+int confirm_functions(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *attribute, void *) {
+    if (!active.load() || stopping || conn != connection)
+        return 0;
+    int status = error->status;
+    std::optional<int> value;
+    uint8_t bytes[2];
+    if (!status && attribute && attribute->om && OS_MBUF_PKTLEN(attribute->om) == 2 &&
+        os_mbuf_copydata(attribute->om, 0, 2, bytes) == 0)
+        value = bridge::decode_trv_readback(bridge::TrvReadField::functions, bytes, 2);
+    if (!status && (!value || *value != expected_functions || !secure_peer()))
+        status = BLE_HS_EBADDATA;
+    portENTER_CRITICAL(&snapshot_lock);
+    snapshot.values[3] = value;
+    snapshot.status[3] = status;
+    portEXIT_CRITICAL(&snapshot_lock);
+    disconnect(status);
+    return 0;
+}
+int functions_written(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *, void *) {
+    if (!active.load() || stopping || conn != connection)
+        return 0;
+    int err = error->status;
+    if (!err)
+        err = ble_gattc_read(connection, handles[3], confirm_functions, nullptr);
+    if (err)
+        disconnect(err);
+    return 0;
+}
+void reads_complete() {
+    if (operation == Operation::probe) {
+        disconnect(successes ? 0 : BLE_HS_ENOENT);
+        return;
+    }
+    if (successes != field_count || !secure_peer()) {
+        disconnect(BLE_HS_EAUTHEN);
+        return;
+    }
+    // A reservation becomes verified only after encrypted, bonded access and
+    // every allowlisted read (including the protected error characteristic).
+    if (bindings.slots[selected_slot].state == bridge::EnrollmentState::pending) {
+        bindings.slots[selected_slot].state = bridge::EnrollmentState::verified;
+        if (save_trv_bindings(bindings) != ESP_OK) {
+            disconnect(BLE_HS_ESTORE_FAIL);
+            return;
+        }
+    }
+    if (operation != Operation::valve_only) {
+        disconnect(0);
+        return;
+    }
+    int functions;
+    portENTER_CRITICAL(&snapshot_lock);
+    functions = *snapshot.values[3];
+    portEXIT_CRITICAL(&snapshot_lock);
+    expected_functions = bridge::valve_only_functions(uint16_t(functions));
+    if (expected_functions == functions) {
+        disconnect(0); // already configured; no write
+        return;
+    }
+    phase(Phase::configuring);
+    const uint8_t bytes[] = {uint8_t(expected_functions), uint8_t(expected_functions >> 8)};
+    // This is the only configuration write. Never write position, setpoint,
+    // calibration, PIN, reset, or any other characteristic in this module.
+    int err = ble_gattc_write_flat(connection, handles[3], bytes, sizeof(bytes), functions_written, nullptr);
+    if (err)
+        disconnect(err);
+}
 int read_value(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *attribute, void *) {
     if (!active.load() || stopping || conn != connection || reading >= field_count)
         return 0;
@@ -126,7 +238,7 @@ void next_read() {
         portEXIT_CRITICAL(&snapshot_lock);
         ++reading;
     }
-    disconnect(successes ? 0 : BLE_HS_ENOENT);
+    reads_complete();
 }
 int characteristic(uint16_t conn, const ble_gatt_error *error, const ble_gatt_chr *chr, void *) {
     if (!active.load() || stopping || conn != connection)
@@ -161,6 +273,11 @@ int service(uint16_t conn, const ble_gatt_error *error, const ble_gatt_svc *svc,
     }
     return 0;
 }
+void discover_services() {
+    phase(Phase::services);
+    if (int err = ble_gattc_disc_svc_by_uuid(connection, &service_uuid.u, service, nullptr))
+        disconnect(err);
+}
 int gap_event(ble_gap_event *event, void *) {
     if (!active.load())
         return 0;
@@ -176,15 +293,35 @@ int gap_event(ble_gap_event *event, void *) {
                 finish(final_result);
             break;
         }
-        phase(Phase::services);
-        if (int err = ble_gattc_disc_svc_by_uuid(connection, &service_uuid.u, service, nullptr))
-            disconnect(err);
+        if (operation == Operation::probe) {
+            discover_services();
+        } else {
+            phase(Phase::security);
+            // Reconnect requires a pre-existing LTK. No automatic re-pairing,
+            // bond deletion or fallback to plaintext on a missing/stale key.
+            if (operation != Operation::enroll && !peer_has_key(peer)) {
+                disconnect(BLE_HS_EAUTHEN);
+                break;
+            }
+            if (int err = ble_gap_security_initiate(connection))
+                disconnect(err);
+        }
+        break;
+    case BLE_GAP_EVENT_ENC_CHANGE:
+        if (stopping || operation == Operation::probe || secured)
+            break;
+        if (event->enc_change.status || !secure_peer()) {
+            disconnect(event->enc_change.status ? event->enc_change.status : BLE_HS_EAUTHEN);
+        } else {
+            secured = true;
+            discover_services();
+        }
         break;
     case BLE_GAP_EVENT_DISCONNECT:
         finish(stopping ? final_result : BLE_HS_ENOTCONN);
         break;
     case BLE_GAP_EVENT_PASSKEY_ACTION:
-        disconnect(BLE_HS_EAUTHEN); // never request, print or inject a passkey in this probe
+        disconnect(BLE_HS_EAUTHEN); // PIN-protected enrollment is not implemented; never guess or downgrade
         break;
     case BLE_GAP_EVENT_REPEAT_PAIRING:
         return BLE_GAP_REPEAT_PAIRING_IGNORE; // never delete an existing bond
@@ -221,15 +358,64 @@ void start_probe(ble_npl_event *) {
     successes = 0;
     final_result = 0;
     stopping = false;
+    secured = false;
+    if (operation != Operation::probe) {
+        if (load_trv_bindings(bindings) != ESP_OK) {
+            finish(BLE_HS_ESTORE_FAIL);
+            return;
+        }
+        auto &binding = bindings.slots[selected_slot];
+        if (operation == Operation::enroll) {
+            const bool pending = binding.state == bridge::EnrollmentState::pending;
+            if (binding.state == bridge::EnrollmentState::verified ||
+                (pending &&
+                 (binding.address_type != peer.type || std::memcmp(binding.address.data(), peer.val, 6)))) {
+                finish(BLE_HS_EALREADY);
+                return;
+            }
+            int count = 0, our_count = 0;
+            if (ble_store_util_count(BLE_STORE_OBJ_TYPE_PEER_SEC, &count) ||
+                ble_store_util_count(BLE_STORE_OBJ_TYPE_OUR_SEC, &our_count) ||
+                (!peer_has_key(peer) &&
+                 (count >= CONFIG_BT_NIMBLE_MAX_BONDS || our_count >= CONFIG_BT_NIMBLE_MAX_BONDS))) {
+                finish(BLE_HS_ESTORE_CAP); // no least-used bond eviction
+                return;
+            }
+            if (!pending) {
+                bridge::TrvBinding reservation;
+                reservation.state = bridge::EnrollmentState::pending;
+                reservation.address_type = peer.type;
+                std::copy(peer.val, peer.val + 6, reservation.address.begin());
+                esp_fill_random(reservation.identity.data(), reservation.identity.size());
+                if (!bindings.reserve(selected_slot, reservation) || save_trv_bindings(bindings) != ESP_OK) {
+                    finish(BLE_HS_ESTORE_FAIL);
+                    return;
+                }
+            }
+        } else {
+            if (binding.state == bridge::EnrollmentState::empty ||
+                (operation == Operation::valve_only && binding.state != bridge::EnrollmentState::verified)) {
+                finish(BLE_HS_ENOENT);
+                return;
+            }
+            peer.type = binding.address_type;
+            std::copy(binding.address.begin(), binding.address.end(), peer.val);
+            if (!peer_has_key(peer)) {
+                finish(BLE_HS_EAUTHEN);
+                return;
+            }
+        }
+    }
     // Matter owns this single host and its callbacks. Change only the bonding
     // request bit, on the host task, with no other BLE link or advertisement.
-    // Even if the valve requests transient link encryption, neither peer is
-    // asked to create a persistent bond. Restore Matter's setting on disconnect.
+    // Only trv_enroll requests a new persistent bond. The probe never requests
+    // bonding, and reconnect/configuration require existing keys.
     saved_bonding = ble_hs_cfg.sm_bonding;
-    ble_hs_cfg.sm_bonding = 0;
+    ble_hs_cfg.sm_bonding = operation == Operation::probe ? 0 : 1;
     bonding_overridden = true;
     phase(Phase::connecting);
-    if (ble_npl_callout_reset(&timeout, ble_npl_time_ms_to_ticks32(20000)) != BLE_NPL_OK) {
+    if (ble_npl_callout_reset(&timeout, ble_npl_time_ms_to_ticks32(
+                                            operation == Operation::probe ? 20000 : 30000)) != BLE_NPL_OK) {
         finish(BLE_HS_ENOMEM);
         return;
     }
@@ -245,12 +431,87 @@ void print_status() {
     std::printf("TRV probe state=%s result=%d elapsed_ms=%llu host_bonding=%u\n", phases[size_t(value.phase)],
                 value.result, static_cast<unsigned long long>(value.elapsed_ms),
                 unsigned(ble_hs_cfg.sm_bonding));
+    std::printf("TRV operation=%s slot=%d encrypted=%u bonded=%u authenticated=%u\n",
+                operations[size_t(value.operation)], value.slot, unsigned(value.encrypted),
+                unsigned(value.bonded), unsigned(value.authenticated));
     for (size_t i = 0; i < field_count; ++i) {
         std::printf("TRV read field=%s status=%d", names[i], value.status[i]);
         if (value.values[i])
             std::printf(" value=%d", *value.values[i]);
         std::printf("\n");
     }
+}
+bool selected_address(const char *text, ble_addr_t &selected, bool pairing_required) {
+    // Enrollment can use the anonymous discovery token. No vendor gateway/app,
+    // known MAC, or address dump is needed for a factory-new valve.
+    const char *separator = std::strchr(text, ':');
+    if (pairing_required && separator && separator == std::strrchr(text, ':')) {
+        char *end;
+        errno = 0;
+        if (text[0] < '0' || text[0] > '9' || separator[1] < '0' || separator[1] > '9')
+            return false;
+        auto session = std::strtoul(text, &end, 10);
+        if (errno || end != separator || session > std::numeric_limits<unsigned>::max())
+            return false;
+        auto index = std::strtoul(separator + 1, &end, 10);
+        if (errno || *end || index > std::numeric_limits<unsigned>::max() ||
+            !find_discovered_trv_candidate(unsigned(session), unsigned(index), selected)) {
+            std::printf("Candidate must belong to the latest discovery and be in pairing mode with PIN "
+                        "protection off\n");
+            return false;
+        }
+        return selected.type == BLE_ADDR_PUBLIC ||
+               (selected.type == BLE_ADDR_RANDOM && (selected.val[5] & 0xc0) == 0xc0);
+    }
+    if (std::strlen(text) != 17)
+        return false;
+    uint8_t address[6];
+    for (size_t i = 0; i < 6; ++i) {
+        if (i < 5 && text[i * 3 + 2] != ':')
+            return false;
+        unsigned octet = 0;
+        for (size_t digit = 0; digit < 2; ++digit) {
+            char c = text[i * 3 + digit];
+            int nibble = c >= '0' && c <= '9'   ? c - '0'
+                         : c >= 'a' && c <= 'f' ? c - 'a' + 10
+                         : c >= 'A' && c <= 'F' ? c - 'A' + 10
+                                                : -1;
+            if (nibble < 0)
+                return false;
+            octet = (octet << 4) | unsigned(nibble);
+        }
+        address[5 - i] = uint8_t(octet);
+    }
+    if (!find_discovered_trv(address, selected, pairing_required)) {
+        std::printf("Target must be an unambiguous recently discovered TRV");
+        if (pairing_required)
+            std::printf(" in pairing mode with PIN protection off");
+        std::printf("\n");
+        return false;
+    }
+    return selected.type == BLE_ADDR_PUBLIC ||
+           (selected.type == BLE_ADDR_RANDOM && (selected.val[5] & 0xc0) == 0xc0);
+}
+int queue_operation(Operation selected_operation, size_t slot, const ble_addr_t &target) {
+    if (ble_diagnostic_scan_active() || !ble_hs_synced())
+        return 1;
+    bool expected = false;
+    if (!active.compare_exchange_strong(expected, true))
+        return 1;
+    peer = target;
+    operation = selected_operation;
+    selected_slot = slot;
+    portENTER_CRITICAL(&snapshot_lock);
+    snapshot = {};
+    snapshot.status.fill(-1);
+    snapshot.phase = Phase::queued;
+    snapshot.operation = selected_operation;
+    snapshot.slot = selected_operation == Operation::probe ? -1 : int(slot);
+    portEXIT_CRITICAL(&snapshot_lock);
+    ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &start_event);
+    std::printf("TRV operation=%s queued; Matter endpoints remain simulated\n",
+                operations[size_t(selected_operation)]);
+    return 0;
 }
 int probe_command(int argc, char **argv) {
     if (argc != 2)
@@ -259,44 +520,39 @@ int probe_command(int argc, char **argv) {
         print_status();
         return 0;
     }
-    // This is an explicit private USB target, not a broadcast address dump.
-    // Keep console history/captures private, as with the onboarding command.
-    if (std::strlen(argv[1]) != 17 || ble_diagnostic_scan_active() || !ble_hs_synced())
-        return 1;
-    uint8_t address[6];
-    for (size_t i = 0; i < 6; ++i) {
-        if (i < 5 && argv[1][i * 3 + 2] != ':')
-            return 1;
-        unsigned octet = 0;
-        for (size_t digit = 0; digit < 2; ++digit) {
-            char c = argv[1][i * 3 + digit];
-            int nibble = c >= '0' && c <= '9'   ? c - '0'
-                         : c >= 'a' && c <= 'f' ? c - 'a' + 10
-                         : c >= 'A' && c <= 'F' ? c - 'A' + 10
-                                                : -1;
-            if (nibble < 0)
-                return 1;
-            octet = (octet << 4) | unsigned(nibble);
-        }
-        address[5 - i] = uint8_t(octet);
+    // The address argument and all console history/captures are private.
+    ble_addr_t target;
+    return selected_address(argv[1], target, false) ? queue_operation(Operation::probe, 0, target) : 1;
+}
+void enrollment_status() {
+    print_status();
+    bridge::Enrollment table;
+    auto err = load_trv_bindings(table);
+    if (err != ESP_OK) {
+        std::printf("TRV bindings storage_error=%d; no automatic erase\n", int(err));
+        return;
     }
-    ble_addr_t selected;
-    if (!find_discovered_trv(address, selected)) {
-        std::printf("Target must be an unambiguous TRV seen by trv_discover within 120 seconds\n");
-        return 1;
+    const char *states[] = {"empty", "pending", "verified"};
+    for (size_t i = 0; i < table.capacity; ++i)
+        std::printf("TRV enrollment slot=%u state=%s matter=simulator\n", unsigned(i),
+                    states[size_t(table.slots[i].state)]);
+}
+int enrollment_command(int argc, char **argv) {
+    if (argc == 2 && std::strcmp(argv[1], "status") == 0) {
+        enrollment_status();
+        return 0;
     }
-    bool expected = false;
-    if (!active.compare_exchange_strong(expected, true))
+    Operation op = std::strcmp(argv[0], "trv_enroll") == 0       ? Operation::enroll
+                   : std::strcmp(argv[0], "trv_valve_only") == 0 ? Operation::valve_only
+                                                                 : Operation::reconnect;
+    if (argc != (op == Operation::enroll ? 3 : 2) || std::strlen(argv[1]) != 1 || argv[1][0] < '0' ||
+        argv[1][0] >= '0' + int(bridge::Enrollment::capacity))
         return 1;
-    peer = selected;
-    portENTER_CRITICAL(&snapshot_lock);
-    snapshot = {};
-    snapshot.status.fill(-1);
-    snapshot.phase = Phase::queued;
-    portEXIT_CRITICAL(&snapshot_lock);
-    ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &start_event);
-    std::printf("Read-only TRV probe queued; no characteristic writes or persistent bond requested\n");
-    return 0;
+    size_t slot = size_t(argv[1][0] - '0');
+    ble_addr_t target{};
+    if (op == Operation::enroll && !selected_address(argv[2], target, true))
+        return 1;
+    return queue_operation(op, slot, target);
 }
 } // namespace
 
@@ -315,4 +571,18 @@ void register_trv_gatt_probe() {
     command.help = "Read-only GATT probe: trv_probe PRIVATE_MAC|status; run trv_discover first";
     command.func = probe_command;
     ESP_ERROR_CHECK(esp_console_cmd_register(&command));
+    for (const auto *name : {"trv_enroll", "trv_reconnect", "trv_valve_only"}) {
+        esp_console_cmd_t cmd{};
+        cmd.command = name;
+        cmd.help =
+            std::strcmp(name, "trv_enroll") == 0
+                ? "USB enrollment: trv_enroll SLOT(0..3) SESSION:INDEX|PRIVATE_MAC, or status; requires "
+                  "pairing mode"
+            : std::strcmp(name, "trv_reconnect") == 0
+                ? "Encrypted read using stored bond: trv_reconnect SLOT(0..3)|status"
+                : "Explicitly disable only automatic temperature control, with readback: trv_valve_only "
+                  "SLOT(0..3)|status";
+        cmd.func = enrollment_command;
+        ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
+    }
 }
