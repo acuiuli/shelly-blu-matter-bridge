@@ -12,7 +12,8 @@ for name in required:
     if f"CONFIG_{name}=y" not in lines:
         raise SystemExit(f"Required setting missing: {name}")
 for name in ["ENABLE_WIFI_STATION", "ENABLE_WIFI_AP", "OPENTHREAD_BORDER_ROUTER",
-             "USE_MINIMAL_MDNS",
+             "USE_MINIMAL_MDNS", "BT_NIMBLE_SMP_REMOVE_BOND_ON_PAIR_FAIL_AS_CENTRAL",
+             "BT_NIMBLE_SMP_UNBOND_ON_KEY_MISSING",
              "USE_BLE_ONLY_FOR_COMMISSIONING", "ESP_INSIGHTS_ENABLED", "ENABLE_WIFI_TELEMETRY"]:
     if f"CONFIG_{name}=y" in lines:
         raise SystemExit(f"Forbidden setting enabled: {name}")

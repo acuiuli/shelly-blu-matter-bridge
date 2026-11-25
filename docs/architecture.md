@@ -83,3 +83,10 @@ and validated reads. Removal/replacement lifecycle support remains pending.
 The four Matter slots still represent simulators. Stored physical identities are not
 yet applied to Matter endpoints. Real binding must prevent simulator identity reuse
 and prove downstream discovery after the bridge has already been commissioned.
+
+Bonded outbound GATT connections use the S3 controller's public Bluetooth identity.
+The pinned Matter SDK configures a new random static commissioning address at boot.
+NimBLE's automatic address selection prefers that random address, so it is unsuitable
+as the long-lived identity presented to a paired TRV. Address selection for outbound
+valve connections is local to each connection. A missing public identity stops the
+operation before the bridge attempts pairing.

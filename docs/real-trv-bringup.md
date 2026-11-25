@@ -2,8 +2,9 @@
 
 Start with one identified valve while retaining its vendor firmware and a recovery
 path. The firmware provides discovery, a read-only GATT probe, experimental persistent
-BLE enrollment and an explicit valve-only configuration command. Enrollment and
-configuration still require real-device validation. Real telemetry/control are not
+BLE enrollment and an explicit valve-only configuration command. The first installed
+valve completed pairing and protected reads. The regulator write and clean-start
+onboarding still need hardware validation. Real telemetry/control are not
 connected to Matter: the four HA devices remain simulators.
 
 ## Intended onboarding without the Shelly app
@@ -122,7 +123,16 @@ in pairing mode using BLE Just Works. This produces an encrypted bond, **not MIT
 authentication**. PIN/passkey-protected enrollment and rotating-address enrollment
 are not implemented; passkey requests abort. Do not weaken an existing device's
 security to make enrollment pass. Reconnect/configuration require an existing LTK
-and never intentionally repair or delete stale bonds.
+and use the controller's stable public identity. A failed reconnect preserves the
+slot. Automatic removal of keys on central pairing failure is disabled in the corrected build.
+
+To refresh a stale bond, first verify the valve's peer capacity and put that same
+valve into physical pairing mode. Run `trv_discover 5`, wait for completion, select its
+current token from `trv_discover status`, then run `trv_repair SLOT SESSION:INDEX`.
+This operation verifies the selected address against the stored slot, commits a
+pending reservation, drops only that peer's local BLE keys and re-enrolls it using
+the same enrollment identity. `trv_repair status` shows completion and read results.
+A mismatched peer is rejected. An interrupted repair can be retried on the same slot.
 
 Verify encrypted reconnect after S3 restart and TRV battery replacement before
 depending on the bridge. Keep all console captures and identifiers private. Production

@@ -43,6 +43,16 @@ bool Enrollment::reserve(size_t slot, const TrvBinding &binding) {
     *this = candidate;
     return true;
 }
+bool Enrollment::begin_repair(size_t slot, uint8_t type, const std::array<uint8_t, 6> &selected) {
+    if (slot >= capacity || !valid())
+        return false;
+    auto &binding = slots[slot];
+    if (binding.state == EnrollmentState::empty || binding.address_type != type ||
+        binding.address != selected)
+        return false;
+    binding.state = EnrollmentState::pending;
+    return true;
+}
 std::array<uint8_t, Enrollment::encoded_size> Enrollment::encode() const {
     std::array<uint8_t, encoded_size> out{};
     out[0] = 'T';

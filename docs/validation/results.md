@@ -6,12 +6,12 @@ measurements below are historical and use the earlier toolchain.
 
 The [first real-TRV report](2026-11-24-real-trv-read.md) records discovery and a
 direct read of one installed 1.5.0 valve while the bridge remained a Thread router.
-Persistent bonds, real Matter telemetry and valve movement remain pending.
 
 The [2026-11-25 enrollment preparation](2026-11-25-enrollment-preparation.md)
 adds persistent peer reservations, SDK bond storage and an explicit USB valve-only
-configuration command. Host checks and non-mutating board guards pass; real
-pairing, regulator writes, bond retention and Matter binding remain pending.
+configuration command. Host checks and non-mutating board guards passed.
+The [first installed-valve enrollment and reboot test](2026-11-25-first-bond.md)
+records the first direct bond, protected reads and a reconnect failure after reboot.
 
 ## Original foundation validation
 
@@ -55,7 +55,7 @@ four valve controls and battery entities. Test-DCL trust is required on the cont
 for this development image. Mesh forwarding performance, Wi-Fi RF inactivity,
 device-type conformance and a full review of HA composition/grouping
 remain **not run**. Real-device command latency, RF
-coexistence under Thread traffic, BLE bonding/control, persistence through reboot/OTA,
+coexistence under Thread traffic, BLE motor control, persistence through OTA,
 9.3.0 OTA import/install/rollback, all maintenance functions, TRV updates and the 14-day
 pilot remain **not run**.
 The [capability matrix](../matter-mapping.md) identifies unresolved standard mappings.

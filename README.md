@@ -40,9 +40,9 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 | Battery | Power Source | Simulated percentage | Battery entities discovered in HA |
 | Identity, availability | Bridged Device Basic Information | Stable slots + separate NVS identity | Host tests and unchanged identity partition across reboot; commissioning/OTA persistence pending |
 | Thread FTD without Wi-Fi | S3 host / H2 UART RCP | Build configuration and runtime setup | Commissioned in HA, elected Thread router; Wi-Fi uninitialized |
-| BLE after commissioning | NimBLE central/observer | Scan diagnostics and bounded GATT read probe | Post-HA scanning and one real TRV read while Thread router; persistent enrollment/control pending |
-| Real TRV discovery/read | Shelly manufacturer metadata and direct GATT | Bounded USB discovery and non-bonding read probe | Six candidates; one installed 1.5.0 valve read; enrollment/control pending |
-| Direct enrollment and valve-only setup | USB configuration, bonded GATT | Persistent peer reservations/bonds; explicit regulator-disable command with readback | Host storage/bitmask tests and non-mutating board guards; real pairing/configuration and HA binding pending |
+| BLE after commissioning | NimBLE central/observer | Scan diagnostics and bonded GATT client | Post-HA scanning and reads on one real TRV while attached to Thread |
+| Real TRV discovery/read | Shelly manufacturer metadata and direct GATT | Bounded USB discovery and read probe | Six candidates discovered; one installed 1.5.0 valve paired and all five protected-session reads passed |
+| Direct enrollment and valve-only setup | USB configuration, bonded GATT | Persistent peer reservations/bonds; explicit regulator-disable command with readback | [Installed-valve pairing and reconnect results](docs/validation/2026-11-25-first-bond.md); regulator write, clean onboarding and HA binding pending |
 | Gateway OTA | Matter OTA Requestor | Enabled; two S3 slots and boot rollback check | Installation/rollback pending |
 | Maintenance and TRV updates | Standard mappings under investigation | Documentation only | Release blockers |
 

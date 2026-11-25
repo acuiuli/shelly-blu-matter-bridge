@@ -33,8 +33,9 @@ const char *uuids[] = {"4936d0ba-ff05-472c-907b-6551898fc016", "c3020a1d-f05b-44
 enum class Phase { idle, queued, connecting, security, services, reading, configuring, disconnecting, done };
 const char *phases[] = {"idle",    "queued",      "connecting",    "security", "services",
                         "reading", "configuring", "disconnecting", "done"};
-enum class Operation { probe, enroll, reconnect, valve_only };
-const char *operations[] = {"probe", "enroll", "reconnect", "valve_only"};
+enum class Operation { probe, enroll, reconnect, valve_only, repair };
+const char *operations[] = {"probe", "enroll", "reconnect", "valve_only", "repair"};
+bool pairs_peer(Operation op) { return op == Operation::enroll || op == Operation::repair; }
 struct Snapshot {
     Phase phase = Phase::idle;
     int result = 0;
@@ -299,7 +300,13 @@ int gap_event(ble_gap_event *event, void *) {
             phase(Phase::security);
             // Reconnect requires a pre-existing LTK. No automatic re-pairing,
             // bond deletion or fallback to plaintext on a missing/stale key.
-            if (operation != Operation::enroll && !peer_has_key(peer)) {
+            ble_gap_conn_desc desc{};
+            if (ble_gap_conn_find(connection, &desc) || desc.our_id_addr.type != BLE_ADDR_PUBLIC ||
+                desc.peer_id_addr.type != peer.type || std::memcmp(desc.peer_id_addr.val, peer.val, 6)) {
+                disconnect(BLE_HS_EINVAL);
+                break;
+            }
+            if (!pairs_peer(operation) && !peer_has_key(peer)) {
                 disconnect(BLE_HS_EAUTHEN);
                 break;
             }
@@ -347,8 +354,12 @@ void start_probe(ble_npl_event *) {
         finish(BLE_HS_EBUSY);
         return;
     }
-    uint8_t own_type;
-    int err = ble_hs_id_infer_auto(0, &own_type);
+    // Matter generates a random static commissioning address on boot. This SDK
+    // prefers that address in infer_auto(), which invalidates downstream bonds
+    // on reboot. Select the controller's public identity only for bonded GATT.
+    uint8_t own_type = BLE_OWN_ADDR_PUBLIC;
+    int err = operation == Operation::probe ? ble_hs_id_infer_auto(0, &own_type)
+                                            : ble_hs_id_copy_addr(BLE_ADDR_PUBLIC, nullptr, nullptr);
     if (err) {
         finish(err);
         return;
@@ -365,11 +376,12 @@ void start_probe(ble_npl_event *) {
             return;
         }
         auto &binding = bindings.slots[selected_slot];
-        if (operation == Operation::enroll) {
+        if (pairs_peer(operation)) {
             const bool pending = binding.state == bridge::EnrollmentState::pending;
-            if (binding.state == bridge::EnrollmentState::verified ||
-                (pending &&
-                 (binding.address_type != peer.type || std::memcmp(binding.address.data(), peer.val, 6)))) {
+            if (operation == Operation::enroll &&
+                (binding.state == bridge::EnrollmentState::verified ||
+                 (pending &&
+                  (binding.address_type != peer.type || std::memcmp(binding.address.data(), peer.val, 6))))) {
                 finish(BLE_HS_EALREADY);
                 return;
             }
@@ -381,7 +393,25 @@ void start_probe(ble_npl_event *) {
                 finish(BLE_HS_ESTORE_CAP); // no least-used bond eviction
                 return;
             }
-            if (!pending) {
+            if (operation == Operation::repair) {
+                std::array<uint8_t, 6> selected;
+                std::copy(peer.val, peer.val + selected.size(), selected.begin());
+                if (!bindings.begin_repair(selected_slot, peer.type, selected)) {
+                    finish(BLE_HS_EINVAL);
+                    return;
+                }
+                // Commit before clearing this peer's local keys. Power loss
+                // leaves the same identity reserved for a deliberate retry.
+                if (save_trv_bindings(bindings) != ESP_OK) {
+                    finish(BLE_HS_ESTORE_FAIL);
+                    return;
+                }
+                int rc = ble_gap_unpair(&peer);
+                if (rc && rc != BLE_HS_ENOENT) {
+                    finish(rc);
+                    return;
+                }
+            } else if (!pending) {
                 bridge::TrvBinding reservation;
                 reservation.state = bridge::EnrollmentState::pending;
                 reservation.address_type = peer.type;
@@ -408,7 +438,7 @@ void start_probe(ble_npl_event *) {
     }
     // Matter owns this single host and its callbacks. Change only the bonding
     // request bit, on the host task, with no other BLE link or advertisement.
-    // Only trv_enroll requests a new persistent bond. The probe never requests
+    // Only enrollment or explicit repair requests a new bond. The probe never requests
     // bonding, and reconnect/configuration require existing keys.
     saved_bonding = ble_hs_cfg.sm_bonding;
     ble_hs_cfg.sm_bonding = operation == Operation::probe ? 0 : 1;
@@ -543,14 +573,15 @@ int enrollment_command(int argc, char **argv) {
         return 0;
     }
     Operation op = std::strcmp(argv[0], "trv_enroll") == 0       ? Operation::enroll
+                   : std::strcmp(argv[0], "trv_repair") == 0     ? Operation::repair
                    : std::strcmp(argv[0], "trv_valve_only") == 0 ? Operation::valve_only
                                                                  : Operation::reconnect;
-    if (argc != (op == Operation::enroll ? 3 : 2) || std::strlen(argv[1]) != 1 || argv[1][0] < '0' ||
+    if (argc != (pairs_peer(op) ? 3 : 2) || std::strlen(argv[1]) != 1 || argv[1][0] < '0' ||
         argv[1][0] >= '0' + int(bridge::Enrollment::capacity))
         return 1;
     size_t slot = size_t(argv[1][0] - '0');
     ble_addr_t target{};
-    if (op == Operation::enroll && !selected_address(argv[2], target, true))
+    if (pairs_peer(op) && !selected_address(argv[2], target, true))
         return 1;
     return queue_operation(op, slot, target);
 }
@@ -571,13 +602,15 @@ void register_trv_gatt_probe() {
     command.help = "Read-only GATT probe: trv_probe PRIVATE_MAC|status; run trv_discover first";
     command.func = probe_command;
     ESP_ERROR_CHECK(esp_console_cmd_register(&command));
-    for (const auto *name : {"trv_enroll", "trv_reconnect", "trv_valve_only"}) {
+    for (const auto *name : {"trv_enroll", "trv_repair", "trv_reconnect", "trv_valve_only"}) {
         esp_console_cmd_t cmd{};
         cmd.command = name;
         cmd.help =
             std::strcmp(name, "trv_enroll") == 0
                 ? "USB enrollment: trv_enroll SLOT(0..3) SESSION:INDEX|PRIVATE_MAC, or status; requires "
                   "pairing mode"
+            : std::strcmp(name, "trv_repair") == 0 ? "Refresh the same valve's BLE keys: trv_repair SLOT "
+                                                     "SESSION:INDEX|PRIVATE_MAC; requires pairing mode"
             : std::strcmp(name, "trv_reconnect") == 0
                 ? "Encrypted read using stored bond: trv_reconnect SLOT(0..3)|status"
                 : "Explicitly disable only automatic temperature control, with readback: trv_valve_only "

@@ -32,6 +32,13 @@ int main() {
     restored->slots[0].state = EnrollmentState::verified;
     auto verified = restored->encode();
     CHECK(Enrollment::decode(verified.data(), verified.size())->slots[0].state == EnrollmentState::verified);
+    CHECK(!restored->begin_repair(0, 0, b.address));
+    CHECK(!restored->begin_repair(0, 1, a.address));
+    CHECK(!restored->begin_repair(2, 0, a.address));
+    CHECK(restored->encode() == verified);
+    CHECK(restored->begin_repair(0, 0, a.address));
+    CHECK(restored->encode() == saved);
+    CHECK(restored->begin_repair(0, 0, a.address)); // resume a pending repair after interruption
     CHECK(!Enrollment::decode(saved.data(), saved.size() - 1));
     CHECK(!Enrollment::decode(nullptr, saved.size()));
     for (auto offset : {0, 4, 5, 6, 7, 8}) {

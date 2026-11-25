@@ -21,6 +21,7 @@ struct Enrollment {
     std::array<TrvBinding, capacity> slots{};
     bool valid() const;
     bool reserve(size_t slot, const TrvBinding &binding);
+    bool begin_repair(size_t slot, uint8_t type, const std::array<uint8_t, 6> &selected);
     std::array<uint8_t, encoded_size> encode() const;
     static std::optional<Enrollment> decode(const uint8_t *data, size_t size);
 };
