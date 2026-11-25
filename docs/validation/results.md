@@ -11,7 +11,9 @@ The [2026-11-25 enrollment preparation](2026-11-25-enrollment-preparation.md)
 adds persistent peer reservations, SDK bond storage and an explicit USB valve-only
 configuration command. Host checks and non-mutating board guards passed.
 The [first installed-valve enrollment and reboot test](2026-11-25-first-bond.md)
-records the first direct bond, protected reads and a reconnect failure after reboot.
+records the original reconnect failure and a passing retest with the corrected
+S3 identity. The bridge recovered its bond after a hardware reset and read all
+five fields, including the valve's protected error register.
 
 ## Original foundation validation
 

@@ -42,7 +42,7 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 | Thread FTD without Wi-Fi | S3 host / H2 UART RCP | Build configuration and runtime setup | Commissioned in HA, elected Thread router; Wi-Fi uninitialized |
 | BLE after commissioning | NimBLE central/observer | Scan diagnostics and bonded GATT client | Post-HA scanning and reads on one real TRV while attached to Thread |
 | Real TRV discovery/read | Shelly manufacturer metadata and direct GATT | Bounded USB discovery and read probe | Six candidates discovered; one installed 1.5.0 valve paired and all five protected-session reads passed |
-| Direct enrollment and valve-only setup | USB configuration, bonded GATT | Persistent peer reservations/bonds; explicit regulator-disable command with readback | [Installed-valve pairing and reconnect results](docs/validation/2026-11-25-first-bond.md); regulator write, clean onboarding and HA binding pending |
+| Direct enrollment and valve-only setup | USB configuration, bonded GATT | Persistent peer reservations/bonds; explicit regulator-disable command with readback | [One installed TRV reconnected after S3 reboot](docs/validation/2026-11-25-first-bond.md); already-disabled regulator confirmed. Actual flag change, clean onboarding and HA binding pending |
 | Gateway OTA | Matter OTA Requestor | Enabled; two S3 slots and boot rollback check | Installation/rollback pending |
 | Maintenance and TRV updates | Standard mappings under investigation | Documentation only | Release blockers |
 

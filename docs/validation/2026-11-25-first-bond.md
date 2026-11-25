@@ -28,5 +28,28 @@ The board returned to Thread with its fabrics present. Slot 0 retained its
 reservation and the other three slots were empty. Four host test suites passed,
 including rejection of a different peer or empty slot during repair and recovery
 of the same enrollment identity. The resolved SDK configuration passed the BLE
-key-retention checks. The remaining hardware test is to repair the selected peer
-and read its protected error register again after rebooting the S3.
+key-retention checks.
+
+## Reconnect with the corrected firmware
+
+The operator opened the pairing window once on the same installed valve. Using
+the image above (source revision `8d6697b`), the bridge matched the selected
+peer and completed repair in slot 0. A USB hardware reset then restarted the
+S3. The console captured the ROM boot marker and OpenThread returned to router
+role with router eligibility enabled. Wi-Fi remained uninitialized.
+
+| Operation on slot 0 | Elapsed | Result |
+| --- | ---: | --- |
+| Repair with the valve in pairing mode | 2,623 ms | Encrypted, bonded connection and five successful GATT reads |
+| Reconnect after S3 reboot | 7,399 ms | Same verified slot, stored bond and five successful reads including the protected error register |
+| Run explicit valve-only setup after reconnect | 1,745 ms | Fresh read showed automatic regulation already disabled, so the command skipped the write |
+
+Each transaction reported a 4°C target, 0% opening, completed calibration,
+function mask 160 and error mask 0. Slot 0 stayed verified and slots 1–3 stayed
+empty. A separate local read through the original gateway took 1,015 ms and
+reported the same position and target. These are individual transaction times
+on one valve. The reconnect used the stored key with no further pairing gesture.
+
+This run verifies bond retention across one S3 hardware reset. Actual regulator
+on-to-off writes, TRV battery replacement, standalone onboarding after a valve
+reset, real HA telemetry and motor control still require separate tests.
