@@ -59,12 +59,14 @@ struct Snapshot {
     uint64_t elapsed_ms = 0;
     Operation operation = Operation::probe;
     int slot = -1;
+    int expected = -1, target = -1;
+    std::optional<int> preflight_position;
     bool submitted = false, acknowledged = false;
     std::optional<int> first_position, later_position;
     bool encrypted = false, bonded = false, authenticated = false;
 };
 Snapshot snapshot;
-std::optional<Snapshot> last_position_result;
+std::array<std::optional<Snapshot>, 2> position_history; // newest completed command first
 portMUX_TYPE snapshot_lock = portMUX_INITIALIZER_UNLOCKED;
 std::atomic<bool> active{false};
 ble_npl_event start_event;
@@ -138,8 +140,10 @@ void finish(int result) {
     snapshot.phase = Phase::done;
     snapshot.result = result;
     snapshot.elapsed_ms = uint64_t(esp_timer_get_time() / 1000) - started_ms;
-    if (writes_position(operation))
-        last_position_result = snapshot;
+    if (writes_position(operation)) {
+        position_history[1] = position_history[0];
+        position_history[0] = snapshot;
+    }
     portEXIT_CRITICAL(&snapshot_lock);
     if (operation == Operation::matter_position) {
         // A failed preflight with no published observation cannot establish current position.
@@ -332,6 +336,8 @@ int read_value(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *attrib
     portENTER_CRITICAL(&snapshot_lock);
     snapshot.values[reading] = decoded;
     snapshot.status[reading] = status;
+    if (writes_position(operation) && reading == position_field)
+        snapshot.preflight_position = decoded;
     portEXIT_CRITICAL(&snapshot_lock);
     if (decoded) {
         ++successes;
@@ -584,18 +590,7 @@ void start_probe(ble_npl_event *) {
     if (err)
         finish(err);
 }
-void print_status(bool position_only = false) {
-    Snapshot value;
-    portENTER_CRITICAL(&snapshot_lock);
-    if (!position_only || writes_position(snapshot.operation))
-        value = snapshot;
-    else if (last_position_result)
-        value = *last_position_result;
-    portEXIT_CRITICAL(&snapshot_lock);
-    if (position_only && !writes_position(value.operation)) {
-        std::printf("No position request since reboot\n");
-        return;
-    }
+void print_snapshot(const Snapshot &value) {
     std::printf("TRV probe state=%s result=%d elapsed_ms=%llu host_bonding=%u\n", phases[size_t(value.phase)],
                 value.result, static_cast<unsigned long long>(value.elapsed_ms),
                 unsigned(ble_hs_cfg.sm_bonding));
@@ -603,15 +598,41 @@ void print_status(bool position_only = false) {
                 operations[size_t(value.operation)], value.slot, unsigned(value.encrypted),
                 unsigned(value.bonded), unsigned(value.authenticated));
     if (writes_position(value.operation))
-        std::printf("TRV position submitted=%u acknowledged=%u first=%d later=%d\n",
+        std::printf("TRV position submitted=%u acknowledged=%u first=%d later=%d expected=%d target=%d "
+                    "preflight=%d\n",
                     unsigned(value.submitted), unsigned(value.acknowledged),
-                    value.first_position.value_or(-1), value.later_position.value_or(-1));
+                    value.first_position.value_or(-1), value.later_position.value_or(-1), value.expected,
+                    value.target, value.preflight_position.value_or(-1));
     for (size_t i = 0; i < field_count; ++i) {
         std::printf("TRV read field=%s status=%d", names[i], value.status[i]);
         if (value.values[i])
             std::printf(" value=%d", *value.values[i]);
         std::printf("\n");
     }
+}
+void print_status(bool position_only = false) {
+    Snapshot value;
+    portENTER_CRITICAL(&snapshot_lock);
+    if (!position_only || writes_position(snapshot.operation))
+        value = snapshot;
+    else if (position_history[0])
+        value = *position_history[0];
+    portEXIT_CRITICAL(&snapshot_lock);
+    if (position_only && !writes_position(value.operation)) {
+        std::printf("No position request since reboot\n");
+        return;
+    }
+    print_snapshot(value);
+}
+void print_position_history() {
+    portENTER_CRITICAL(&snapshot_lock);
+    const auto retained = position_history;
+    portEXIT_CRITICAL(&snapshot_lock);
+    if (!retained[0])
+        std::printf("No completed position requests since reboot\n");
+    for (const auto &entry : retained)
+        if (entry)
+            print_snapshot(*entry);
 }
 bool selected_address(const char *text, ble_addr_t &selected, bool pairing_required) {
     // Enrollment can use the anonymous discovery token. No vendor gateway/app,
@@ -681,6 +702,8 @@ int queue_operation(Operation selected_operation, size_t slot, const ble_addr_t 
     snapshot.status.fill(-1);
     snapshot.phase = Phase::queued;
     snapshot.operation = selected_operation;
+    snapshot.expected = request.expected;
+    snapshot.target = request.target;
     snapshot.slot = selected_operation == Operation::probe ? -1 : int(slot);
     portEXIT_CRITICAL(&snapshot_lock);
     ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &start_event);
@@ -712,6 +735,10 @@ void enrollment_status() {
         std::printf("TRV enrollment slot=%u state=%s\n", unsigned(i), states[size_t(table.slots[i].state)]);
 }
 int set_position_command(int argc, char **argv) {
+    if (argc == 2 && std::strcmp(argv[1], "history") == 0) {
+        print_position_history();
+        return 0;
+    }
     if (argc == 2 && std::strcmp(argv[1], "status") == 0) {
         print_status(true);
         return 0;
@@ -762,7 +789,9 @@ bool queue_position_read(size_t slot) {
 bool queue_matter_position(size_t slot, const bridge::EnrollmentId &id, uint8_t expected, uint8_t target) {
     return slot < bridge::Enrollment::capacity && expected <= 100 && target <= 100 &&
            queue_operation(Operation::matter_position, slot, {},
-                           {expected, target, uint64_t(esp_timer_get_time() / 1000) + 15000}, id) == 0;
+                           {expected, target, uint64_t(esp_timer_get_time() / 1000) + 15000,
+                            bridge::PositionPrecondition::match_expected_or_target},
+                           id) == 0;
 }
 
 bool trv_gatt_probe_active() { return active.load(); }
@@ -781,7 +810,8 @@ void register_trv_gatt_probe() {
                         : ESP_FAIL);
     esp_console_cmd_t position{};
     position.command = "trv_position";
-    position.help = "Direct bonded USB test: trv_position SLOT EXPECTED_PERCENT TARGET_PERCENT | status";
+    position.help =
+        "Direct bonded USB test: trv_position SLOT EXPECTED_PERCENT TARGET_PERCENT | status | history";
     position.func = set_position_command;
     ESP_ERROR_CHECK(esp_console_cmd_register(&position));
     esp_console_cmd_t command{};

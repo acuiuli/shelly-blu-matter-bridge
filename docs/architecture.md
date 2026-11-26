@@ -94,8 +94,10 @@ enrollment. Open and Close reserve a single bonded BLE operation and publish the
 requested target while it runs. Repeated or concurrent requests receive Busy when
 the radio is occupied. The target expires when the operation finishes. Confirmed
 levels come from the encrypted TRV reads. Unavailable samples produce a null level.
-The preflight requires a matching enrollment, expected position, disabled regulator,
-successful calibration and clear errors. A command has a 15-second submission
+The preflight requires a matching enrollment, a disabled regulator, successful
+calibration and clear errors. Each motor write also requires the expected starting
+position. When the bonded read already matches an absolute Matter target, the
+bridge verifies it twice without actuating, even if the last published level differed. A command has a 15-second submission
 deadline and is never replayed. Finite-duration commands remain a conformance gap.
 Clean-start onboarding and closure under the installation's heating controls require
 separate validation.

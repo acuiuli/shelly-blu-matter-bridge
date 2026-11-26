@@ -29,6 +29,38 @@ int main() {
     TrvPositionWrite noop{18, 18, 15000};
     CHECK(noop.take(live, 1) == Decision::already_at_target);
     CHECK(noop.take(live, 1) == Decision::reject);
+    // HA last saw 20%. An independent change can put the valve at 0% before Close arrives.
+    auto preflight = live;
+    preflight[size_t(TrvReadField::position)] = 0;
+    const TrvPositionWrite absolute_close{20, 0, 15000, PositionPrecondition::match_expected_or_target};
+    auto once = absolute_close;
+    CHECK(once.take(preflight, 7500) == Decision::already_at_target);
+    CHECK(once.take(preflight, 7501) == Decision::reject);
+    once = absolute_close;
+    CHECK(once.take(live, 1) == Decision::reject); // 18% is neither the target nor the expected start
+    preflight[size_t(TrvReadField::position)] = 20;
+    TrvPositionWrite absolute_open{0, 20, 15000, PositionPrecondition::match_expected_or_target};
+    CHECK(absolute_open.take(preflight, 1) == Decision::already_at_target);
+    once = absolute_close;
+    CHECK(once.take(preflight, 1) == Decision::write);
+    preflight[size_t(TrvReadField::position)] = 0;
+    TrvPositionWrite strict_close{20, 0, 15000};
+    CHECK(strict_close.take(preflight, 1) == Decision::reject);
+    once = absolute_close;
+    CHECK(once.take(preflight, 15000) == Decision::reject);
+    for (auto field :
+         {TrvReadField::position, TrvReadField::functions, TrvReadField::calibration, TrvReadField::errors}) {
+        auto unhealthy = preflight;
+        unhealthy[size_t(field)].reset();
+        once = absolute_close;
+        CHECK(once.take(unhealthy, 1) == Decision::reject);
+    }
+    for (auto field : {TrvReadField::functions, TrvReadField::calibration, TrvReadField::errors}) {
+        auto unhealthy = preflight;
+        unhealthy[size_t(field)] = field == TrvReadField::calibration ? 0 : 1;
+        once = absolute_close;
+        CHECK(once.take(unhealthy, 1) == Decision::reject);
+    }
     for (const int invalid_target : {-1, 101}) {
         TrvPositionWrite malformed{18, invalid_target, 15000};
         CHECK(malformed.take(live, 1) == Decision::reject);

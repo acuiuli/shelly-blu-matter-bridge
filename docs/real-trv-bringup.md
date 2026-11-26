@@ -228,8 +228,11 @@ once and is never stored or automatically retried.
 `submitted` and `acknowledged` record whether the position write was sent and accepted.
 `first` is a freshly decoded position and `later` is another read scheduled
 12 seconds later on the same encrypted connection. An equal-position request
-also performs both readbacks. USB status retains the last position command result
-until the next one or reboot. Each valid observation is
+also performs both readbacks. `trv_position status` shows the active or latest
+position request. `trv_position history` shows the two most recent completed
+USB or Matter position requests across all slots, newest first. It records the
+expected start, target, preflight percentage, both readbacks and the write result.
+Polling preserves the history. Restart clears it. Each valid observation is
 published to Matter. A final mismatch returns an error while retaining the actual
 position. A missing final read marks the prior publication unavailable until a
 fresh poll. A value of -1 in the USB readbacks means no reading was obtained for
@@ -249,8 +252,11 @@ Coordinate other writers for this radiator and record its live starting position
    small opening. Check `trv_position status` over USB for `operation=matter_position`,
    the acknowledgment and both readbacks. Check the Matter entity's
    `current_position` in HA. A delayed mismatch ends the request with an error.
+   When the fresh preflight already equals the target, Matter proceeds to both
+   readbacks without writing. A third position rejects the request. USB retains
+   its explicit expected-start check.
 3. Restore the measured starting position using the same Matter entity. Use
-   **Valve: Close** for zero. Record the later read and check HA again.
+   **Valve: Close** for zero. Read `trv_position history` to record both operations. Check the HA state and percentage together.
 
 The bridge accepts one BLE operation at a time. A busy request must be issued
 again by the caller after fresh feedback. Finite timed opens and finite default

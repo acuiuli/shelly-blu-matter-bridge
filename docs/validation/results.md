@@ -20,7 +20,9 @@ valve through the existing bridge and operator confirmation of the displayed cha
 during a Shelly-commanded movement test. The report includes the initially conflicting
 closure readings, the matching 18% HA action and the independent checks on the
 restored position. It also covers the USB guards and the first bonded write from the S3.
-The valve reported 20% immediately and 0% on the delayed read.
+The valve reported 20% immediately and 0% on the delayed USB read. In a later
+test HA sent both commands through Matter and displayed 20%/open and 0%/closed.
+The bridge found zero during the Close preflight and submitted no closing write.
 
 ## Original foundation validation
 

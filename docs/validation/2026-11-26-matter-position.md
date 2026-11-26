@@ -110,8 +110,8 @@ the entity under Matter when the Shelly integration also exposes the radiator.
 
 Host tests cover a fresh zero, expiry at the threshold, a renewed sample, invalid
 percentages, source mismatch and a clock earlier than the observation. An absent
-physical valve, HA's behavior upon expiry, direct actuation through Matter, clean
-onboarding and operation with the original gateway offline still need hardware tests.
+physical valve, HA's behavior upon expiry, clean onboarding and operation with
+the original gateway offline still need hardware tests.
 The original observation-only build rejected physical commands. [Bring-up procedure](../real-trv-bringup.md)
 
 ## First position write from the S3
@@ -138,3 +138,38 @@ Flash verification passed. After reboot the bridge retained both fabrics, the fo
 simulated TRVs and physical endpoint 10. It rejoined Thread as a router with Wi-Fi
 uninitialized. Its first bonded read returned 0% in 8,515 ms. Free heap was
 97,760 bytes and minimum heap was 92,332 bytes at the diagnostic snapshot.
+
+## Home Assistant Open and Close on endpoint 10
+
+The operator used the Matter valve for both actions. Home Assistant displayed
+`current_position: 20` with `is_closed: false` after requesting 20%. After
+**Close valve** it displayed `current_position: 0` with `is_closed: true`.
+Endpoint 10 had counted two completed Matter operations and zero admission rejections.
+
+The retained Close operation took 7,535 ms. Its encrypted, bonded preflight
+read found 0%, a 4°C setpoint, functions mask 160, successful calibration and
+zero errors. The operation returned code 3 before any write or post-command
+readback. The radiator was already at zero when the S3 checked. The cause and
+time of the change are unknown. This firmware retained only the most recent
+position operation, so the delayed BLE reading for Open could not be recovered.
+The HA state transitions passed for this run. A write that moves an open valve
+to closed through Matter still requires a separate observation.
+
+### Confirmation when the valve already reached the requested position
+
+The updated S3 application is 1,605,904 bytes, SHA-256
+`670cf5c4cc4932f601691c6cc4c2f3f435023f3e9ac4d55efb95a3ea5ef0b0a3`.
+Flash verification passed. The S3 rejoined Thread as a router and recovered
+endpoint 10 with its existing BLE bond. Its first read returned 0% in 4,579 ms.
+
+The host regression supplies a cached opening of 20%, an absolute Close request,
+and a healthy bonded preflight of 0%. The command proceeds to readback without a
+write. The tests cover the equivalent already-open case, an unrelated position
+change, expiry, reuse, missing fields, regulator/calibration/error checks and a
+strict USB request with a mismatched start.
+
+On the installed board, two no-movement USB tests exercised result retention. A
+strict request expecting 100% found 0% and failed before submission. A request
+expecting and targeting 0% succeeded with initial and delayed readings of 0%
+in 20,264 ms. After a subsequent reconnect started, USB history retained both
+completed commands with their original expected, requested and preflight values.
