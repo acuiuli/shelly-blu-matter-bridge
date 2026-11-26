@@ -32,7 +32,7 @@ architectures concurrently.
 
 | Layer | Current implementation | Extension contract |
 | --- | --- | --- |
-| Device communication | `bridge::Simulator` | Replace with asynchronous BLE transport; one transaction per TRV; validate frames before observations |
+| Device communication | `bridge::Simulator` and single-connection bonded GATT reader | Deliver validated observations from the selected peer to the Matter task |
 | Reconciliation | `bridge::Engine` | Commands carry monotonic expiry and generation token; telemetry is authoritative |
 | Matter representation | `firmware/main/app_main.cpp` | Standard clusters; callbacks enqueue intent, periodic owner task publishes observations |
 | Persistence | Separate `bridge_store` NVS identity/binding partition; SDK NimBLE NVS keys | Versioned physical-peer reservations; no command persistence |
@@ -80,9 +80,18 @@ lengths are explicitly serialized; BLE keys remain in the SDK's NVS store. A pen
 reservation survives interrupted pairing. Promotion requires encrypted bonded access
 and validated reads. Removal/replacement lifecycle support remains pending.
 
-The four Matter slots still represent simulators. Stored physical identities are not
-yet applied to Matter endpoints. Real binding must prevent simulator identity reuse
-and prove downstream discovery after the bridge has already been commissioned.
+A verified physical valve gets a separate Bridged Node and Water Valve on one endpoint
+under Aggregator 1. The SDK assigns its number after startup. The bridge stores that
+number with the enrollment identity and resumes it on subsequent boots. Its UniqueID
+derives from that identity. The four simulated TRVs keep their own endpoints.
+
+The NimBLE task posts a dated position sample after verifying the bonded peer and
+decoding its percentage. The Matter task updates CurrentLevel, CurrentState and
+Reachable. Polling targets five minutes. A sample expires at ten minutes and thirty
+seconds. At boot a new observation is required. A failed read cannot refresh the age.
+The physical endpoint rejects Valve cluster commands before the standard handler runs.
+This reporting interval is experimental and unsuitable for confirming a new closure
+in a heating automation. Clean-start onboarding and actuator control require separate tests.
 
 Bonded outbound GATT connections use the S3 controller's public Bluetooth identity.
 The pinned Matter SDK configures a new random static commissioning address at boot.

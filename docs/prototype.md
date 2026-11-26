@@ -93,14 +93,13 @@ controller acceptance testing. No heating algorithm runs in the gateway.
 ## Limitations
 
 Bounded real-device discovery and a read-only GATT probe are available through
-`trv_discover` and `trv_probe`; see [first real TRV](real-trv-bringup.md). Enrollment,
-BTHome telemetry decoding, persistent bonding, motor commands, calibration, external
-sensor input and TRV updates are not implemented. Run `ble_scan 10`, wait ten seconds, then `ble_scan status` before
-and after commissioning. It reports synchronization, completion, advertisement counts
-and RSSI bounds without addresses or payloads. Receiving advertisements proves scanning;
-the first direct GATT connection/read has passed for an installed 1.5.0 valve.
-Persistent bonding and control remain separate tests. Scanning after commissioning
-has passed on the reference board.
-USB supports simulator configuration, bounded passive BLE scans and diagnostics; secure real-valve
-enrollment is a subsequent milestone. Default development credentials, security
-hardening, full conformance testing, and real OTA rollback qualification remain open.
+`trv_discover` and `trv_probe`; see [first real TRV](real-trv-bringup.md). USB enrollment, bonded reconnect and
+physical position reporting are implemented. The explicit valve-only setup command
+has passed its already-disabled case. A change from enabled to disabled still needs
+a test. Real motor commands, BTHome telemetry decoding, calibration, external sensor
+input and TRV updates are pending.
+
+The `ble_scan 10` and `ble_scan status` commands report passive scan results and RSSI
+bounds without addresses or payloads. Scanning and bonded reads have passed after HA
+commissioning. Production credentials, security hardening, full conformance testing
+and OTA rollback qualification remain open.

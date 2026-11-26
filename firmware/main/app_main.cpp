@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "ble_diagnostics.h"
 #include "bridge/bridge.hpp"
+#include "matter_trv_position.h"
 #include <app/clusters/valve-configuration-and-control-server/CodegenIntegration.h>
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
@@ -174,6 +175,7 @@ static void publish(intptr_t) {
             esp_matter_nullable_uint8(s.reachable ? nullable<uint8_t>(t.battery * 2) : nullable<uint8_t>()));
         publish_valve(d, s);
     }
+    publish_trv_positions(now_ms());
     publishing = false;
     confirm_boot_health();
 }
@@ -339,6 +341,7 @@ static void show_simulator_state(intptr_t) {
                     unsigned(s.reachable), cmd.value, s.reported ? s.reported->position : -1,
                     unsigned(cmd.outcome), static_cast<unsigned long long>(now - s.last_seen));
     }
+    show_trv_positions(now);
 }
 static int diagnostic_command(int, char **) {
     if (!esp_openthread_get_instance()) {
@@ -409,6 +412,7 @@ static int commissioning_command(int argc, char **argv) {
 extern "C" void app_main() {
     ESP_ERROR_CHECK(nvs_flash_init()); // fail visibly; never erase credentials automatically
     load_identity();
+    initialize_position_bindings();
     esp_openthread_platform_config_t ot{};
     ot.radio_config.radio_mode = RADIO_MODE_UART_RCP;
     auto &uart = ot.radio_config.radio_uart_config;
@@ -430,6 +434,7 @@ extern "C" void app_main() {
     auto *node = node::create(&config, changed, identify_cb);
     ESP_ERROR_CHECK(node ? ESP_OK : ESP_FAIL);
     create_devices(node);
+    install_position_command_gate();
     ESP_ERROR_CHECK(esp_matter::start(nullptr));
     ESP_ERROR_CHECK(esp_openthread_get_instance() ? ESP_OK : ESP_FAIL);
     wifi_mode_t wifi_mode;

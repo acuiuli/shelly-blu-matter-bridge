@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+#include "bridge/position_observation.hpp"
 #include "bridge/trv_readback.hpp"
 #include <cstdlib>
 #include <iostream>
@@ -12,6 +13,19 @@
     } while (false)
 using namespace bridge;
 int main() {
+    EnrollmentId valve{1}, other{2};
+    PositionObservation reading{};
+    CHECK(!reading.current(valve, 20, 100));
+    reading = {valve, 20, 0};
+    CHECK(reading.current(valve, 20, 100) == 0);
+    CHECK(!reading.current(other, 20, 100));
+    CHECK(!reading.current(valve, 19, 100));
+    CHECK(reading.current(valve, 119, 100) == 0);
+    CHECK(!reading.current(valve, 120, 100));
+    reading = {valve, 120, 50};
+    CHECK(reading.current(valve, 125, 100) == 50);
+    reading.position = 101;
+    CHECK(!reading.current(valve, 125, 100));
     const uint8_t minimum[] = {40, 0}, normal[] = {210, 0}, maximum[] = {44, 1};
     CHECK(decode_trv_readback(TrvReadField::target, minimum, 2) == 400);
     CHECK(decode_trv_readback(TrvReadField::target, normal, 2) == 2100);

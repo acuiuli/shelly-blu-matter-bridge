@@ -4,16 +4,16 @@ Start with one identified valve while retaining its vendor firmware and a recove
 path. The firmware provides discovery, a read-only GATT probe, experimental persistent
 BLE enrollment and an explicit valve-only configuration command. The first installed
 valve completed pairing and protected reads. The regulator write and clean-start
-onboarding still need hardware validation. Real telemetry/control are not
-connected to Matter: the four HA devices remain simulators.
+onboarding still need hardware validation. Verified BLE valves now get a dedicated
+Matter endpoint reporting physical position. The four simulated TRVs retain their identities.
 
 ## Intended onboarding without the Shelly app
 
 Commission the bridge into HA once using Matter. Enroll each BLE TRV directly with
 the bridge over private USB, using the TRV's physical pairing mode. No Shelly account,
 app or vendor gateway is a prerequisite for that intended flow. HA will receive the
-real thermostat/valve/battery through the existing Matter bridge, without a separate
-Matter pairing code for each BLE valve. This final step is not implemented yet.
+physical valve through the existing Matter bridge. Each BLE valve needs no Matter
+pairing code. Physical thermostat and battery reporting are future steps.
 
 Initial setup must offer **valve-only control** explicitly. Selecting it disables the
 TRV's automatic temperature regulator over BLE and verifies the setting on the valve.
@@ -22,11 +22,17 @@ disable Shelly's regulator. Thermostat `SystemMode` has not been established as 
 legitimate mapping for this flag; do not manufacture an HA switch or repurpose a
 standard attribute. USB setup does not resolve the full-parity Matter mapping gate.
 
-The prototype reserves four simulated slots. Promoting one slot to a real device,
-correct physical-device identity and HA discovery after the bridge has already been
-commissioned require separate implementation and acceptance. A stored enrollment
-identity must not silently inherit a simulator's physical identity or be reassigned
-to a different valve.
+After enrollment, run `diag` over USB. The `Physical TRV` line gives the endpoint,
+reachability, confirmed position and sample age. Slot 0 has the default Matter
+label **Shelly BLU TRV 1**. Look for its valve in **Settings → Devices & services →
+Matter → Devices** and inspect the entity's `current_position` in Developer Tools →
+States. Match the new entity to the Matter integration. The existing Shelly
+integration may also have an entity for the same radiator. Leave its heating
+automations attached to the existing control path during this read-only test.
+
+The physical Matter endpoint rejects valve commands. HA may still show Open, Close
+and position controls. Use `trv_reconnect 0` for an immediate encrypted read and
+wait for completion before checking `diag`. Otherwise the bridge polls automatically.
 
 ## 1. Identify and record the baseline
 

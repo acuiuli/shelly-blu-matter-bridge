@@ -3,6 +3,7 @@
 #include "ble_diagnostics.h"
 #include "bridge/enrollment.hpp"
 #include "bridge/trv_readback.hpp"
+#include "matter_trv_position.h"
 #include "trv_binding_store.h"
 #include <algorithm>
 #include <array>
@@ -33,8 +34,8 @@ const char *uuids[] = {"4936d0ba-ff05-472c-907b-6551898fc016", "c3020a1d-f05b-44
 enum class Phase { idle, queued, connecting, security, services, reading, configuring, disconnecting, done };
 const char *phases[] = {"idle",    "queued",      "connecting",    "security", "services",
                         "reading", "configuring", "disconnecting", "done"};
-enum class Operation { probe, enroll, reconnect, valve_only, repair };
-const char *operations[] = {"probe", "enroll", "reconnect", "valve_only", "repair"};
+enum class Operation { probe, enroll, reconnect, valve_only, repair, position };
+const char *operations[] = {"probe", "enroll", "reconnect", "valve_only", "repair", "position"};
 bool pairs_peer(Operation op) { return op == Operation::enroll || op == Operation::repair; }
 struct Snapshot {
     Phase phase = Phase::idle;
@@ -58,6 +59,8 @@ std::array<uint16_t, field_count> handles{};
 uint16_t connection = BLE_HS_CONN_HANDLE_NONE;
 uint16_t service_start = 0, service_end = 0;
 size_t reading = 0;
+constexpr size_t position_field = size_t(bridge::TrvReadField::position);
+uint64_t position_observed_ms = 0;
 unsigned successes = 0;
 int final_result = 0;
 bool bonding_overridden = false;
@@ -167,7 +170,9 @@ void reads_complete() {
         disconnect(successes ? 0 : BLE_HS_ENOENT);
         return;
     }
-    if (successes != field_count || !secure_peer()) {
+    const bool poll = operation == Operation::position;
+    if (successes != (poll ? 1U : field_count) || !secure_peer() ||
+        (poll && bindings.slots[selected_slot].state != bridge::EnrollmentState::verified)) {
         disconnect(BLE_HS_EAUTHEN);
         return;
     }
@@ -180,6 +185,8 @@ void reads_complete() {
             return;
         }
     }
+    observe_trv_position(selected_slot, bindings.slots[selected_slot].identity,
+                         uint8_t(*snapshot.values[position_field]), position_observed_ms);
     if (operation != Operation::valve_only) {
         disconnect(0);
         return;
@@ -220,8 +227,11 @@ int read_value(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *attrib
     snapshot.values[reading] = decoded;
     snapshot.status[reading] = status;
     portEXIT_CRITICAL(&snapshot_lock);
-    if (decoded)
+    if (decoded) {
         ++successes;
+        if (reading == position_field)
+            position_observed_ms = esp_timer_get_time() / 1000;
+    }
     ++reading;
     next_read();
     return 0;
@@ -230,6 +240,10 @@ void next_read() {
     if (!active.load() || stopping)
         return;
     while (reading < field_count) {
+        if (operation == Operation::position && reading != position_field) {
+            ++reading;
+            continue;
+        }
         int err = handles[reading] ? ble_gattc_read(connection, handles[reading], read_value, nullptr)
                                    : BLE_HS_ENOENT;
         if (err == 0)
@@ -367,6 +381,7 @@ void start_probe(ble_npl_event *) {
     handles = {};
     service_start = service_end = 0;
     successes = 0;
+    position_observed_ms = 0;
     final_result = 0;
     stopping = false;
     secured = false;
@@ -406,6 +421,7 @@ void start_probe(ble_npl_event *) {
                     finish(BLE_HS_ESTORE_FAIL);
                     return;
                 }
+                invalidate_trv_position(selected_slot);
                 int rc = ble_gap_unpair(&peer);
                 if (rc && rc != BLE_HS_ENOENT) {
                     finish(rc);
@@ -424,7 +440,8 @@ void start_probe(ble_npl_event *) {
             }
         } else {
             if (binding.state == bridge::EnrollmentState::empty ||
-                (operation == Operation::valve_only && binding.state != bridge::EnrollmentState::verified)) {
+                ((operation == Operation::valve_only || operation == Operation::position) &&
+                 binding.state != bridge::EnrollmentState::verified)) {
                 finish(BLE_HS_ENOENT);
                 return;
             }
@@ -539,8 +556,8 @@ int queue_operation(Operation selected_operation, size_t slot, const ble_addr_t 
     snapshot.slot = selected_operation == Operation::probe ? -1 : int(slot);
     portEXIT_CRITICAL(&snapshot_lock);
     ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &start_event);
-    std::printf("TRV operation=%s queued; Matter endpoints remain simulated\n",
-                operations[size_t(selected_operation)]);
+    if (selected_operation != Operation::position)
+        std::printf("TRV operation=%s queued\n", operations[size_t(selected_operation)]);
     return 0;
 }
 int probe_command(int argc, char **argv) {
@@ -564,8 +581,7 @@ void enrollment_status() {
     }
     const char *states[] = {"empty", "pending", "verified"};
     for (size_t i = 0; i < table.capacity; ++i)
-        std::printf("TRV enrollment slot=%u state=%s matter=simulator\n", unsigned(i),
-                    states[size_t(table.slots[i].state)]);
+        std::printf("TRV enrollment slot=%u state=%s\n", unsigned(i), states[size_t(table.slots[i].state)]);
 }
 int enrollment_command(int argc, char **argv) {
     if (argc == 2 && std::strcmp(argv[1], "status") == 0) {
@@ -586,6 +602,10 @@ int enrollment_command(int argc, char **argv) {
     return queue_operation(op, slot, target);
 }
 } // namespace
+
+bool queue_position_read(size_t slot) {
+    return slot < bridge::Enrollment::capacity && queue_operation(Operation::position, slot, {}) == 0;
+}
 
 bool trv_gatt_probe_active() { return active.load(); }
 void register_trv_gatt_probe() {

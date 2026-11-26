@@ -15,6 +15,9 @@ records the original reconnect failure and a passing retest with the corrected
 S3 identity. The bridge recovered its bond after a hardware reset and read all
 five fields, including the valve's protected error register.
 
+The [physical position report](2026-11-26-matter-position.md) tracks the first
+read-only Matter endpoint backed by a bonded valve.
+
 ## Original foundation validation
 
 Recorded **2026-11-10** from the foundation working tree (no release tag). These are

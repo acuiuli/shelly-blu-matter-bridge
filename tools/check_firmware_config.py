@@ -19,6 +19,8 @@ for name in ["ENABLE_WIFI_STATION", "ENABLE_WIFI_AP", "OPENTHREAD_BORDER_ROUTER"
         raise SystemExit(f"Forbidden setting enabled: {name}")
 if "CONFIG_BT_NIMBLE_MAX_BONDS=8" not in lines:
     raise SystemExit("Expected eight local bond slots for four TRVs plus BLE commissioning headroom")
+if "CONFIG_ESP_MATTER_MAX_DYNAMIC_ENDPOINT_COUNT=14" not in lines:
+    raise SystemExit("Expected space for root, aggregator, eight simulator endpoints and four physical valves")
 args = Path("firmware/build/esp-idf/chip/args.gn").read_text()
 if 'chip_mdns = "platform"' not in args:
     raise SystemExit("Thread requires the platform DNS-SD backend for SRP discovery")
