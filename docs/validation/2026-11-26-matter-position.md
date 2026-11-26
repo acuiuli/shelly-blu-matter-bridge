@@ -94,7 +94,7 @@ and physical endpoint 10.
 Host tests covered the write decision, request expiry, reuse of consumed intent,
 an enabled or unread regulator, missing telemetry, calibration and fault status.
 The tests on the installed valve exercised the guards and both encrypted readbacks.
-A real change in opening issued by the S3 still needs a coordinated movement test.
+These guard checks preceded the first S3 actuation test below.
 [USB procedure](../real-trv-bringup.md#7-test-a-direct-usb-position-command)
 
 ## Reproduction and outstanding checks
@@ -112,4 +112,29 @@ Host tests cover a fresh zero, expiry at the threshold, a renewed sample, invali
 percentages, source mismatch and a clock earlier than the observation. An absent
 physical valve, HA's behavior upon expiry, direct actuation through Matter, clean
 onboarding and operation with the original gateway offline still need hardware tests.
-The physical valve rejects movement commands in this build. [Bring-up procedure](../real-trv-bringup.md)
+The original observation-only build rejected physical commands. [Bring-up procedure](../real-trv-bringup.md)
+
+## First position write from the S3
+
+The operator switched off the Better Thermostat controlling this radiator. The
+vendor gateway remained online. A fresh encrypted reconnect found 0%, a 4°C
+setpoint, functions mask 160, successful calibration and zero reported errors.
+
+| USB operation on the S3 | First read | Delayed read | Result |
+| --- | --- | --- | --- |
+| Request 20% from a measured 0% | 20% | 0% | One acknowledged BLE write. The delayed mismatch failed the command after 20,479 ms. |
+| Independent reconnect | 0% | — | Reconfirmed the starting position in 1,712 ms. No restoration write was needed. |
+
+The delayed read was scheduled 12 seconds after the first read. The setpoint,
+functions, calibration and errors matched the baseline on the independent
+reconnect. These readings establish command delivery and detection of a reversal.
+They do not establish sustained opening, motor travel, or the cause of the reversal.
+
+## Physical Matter command firmware
+
+The S3 application is 1,605,456 bytes, SHA-256
+`f3d80734483e5a139b65046542e30ec06afff558bd1560e1e343bc68d2730f8c`.
+Flash verification passed. After reboot the bridge retained both fabrics, the four
+simulated TRVs and physical endpoint 10. It rejoined Thread as a router with Wi-Fi
+uninitialized. Its first bonded read returned 0% in 8,515 ms. Free heap was
+97,760 bytes and minimum heap was 92,332 bytes at the diagnostic snapshot.

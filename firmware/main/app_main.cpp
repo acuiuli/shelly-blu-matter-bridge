@@ -434,7 +434,6 @@ extern "C" void app_main() {
     auto *node = node::create(&config, changed, identify_cb);
     ESP_ERROR_CHECK(node ? ESP_OK : ESP_FAIL);
     create_devices(node);
-    install_position_command_gate();
     ESP_ERROR_CHECK(esp_matter::start(nullptr));
     ESP_ERROR_CHECK(esp_openthread_get_instance() ? ESP_OK : ESP_FAIL);
     wifi_mode_t wifi_mode;

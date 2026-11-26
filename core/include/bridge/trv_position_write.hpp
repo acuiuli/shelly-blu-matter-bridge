@@ -5,7 +5,7 @@
 #include <cstdint>
 
 namespace bridge {
-// A USB request is consumed immediately before submission on the BLE host task.
+// A position request is consumed immediately before submission on the BLE host task.
 // Only complete, decoded fields from the current encrypted connection are used.
 enum class PositionDecision { reject, already_at_target, write };
 struct TrvPositionWrite {

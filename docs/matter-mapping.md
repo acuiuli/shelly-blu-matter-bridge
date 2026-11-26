@@ -1,22 +1,22 @@
 # Capability matrix and full-parity blockers
 
 Every row is required for a full-parity release. “Candidate” means the proposed standard
-mapping still requires a specification and controller check. **No row has hardware
-end-to-end acceptance evidence yet.** A [read-only real-valve probe](validation/2026-11-24-real-trv-read.md)
-has validated selected downstream reads; these are not yet fed into Matter.
-Simulator and controller evidence is in [results](validation/results.md).
+mapping still requires a specification and controller check. Physical position feedback has been observed on an installed TRV in HA, including
+a reversal. Actuation has separate acceptance criteria for delivery and a sustained
+result. [Physical valve report](validation/2026-11-26-matter-position.md) · [Simulator results](validation/results.md)
+
 The scope is the function list agreed for the current device page, not every vendor
 schedule/display feature. Freeze a sanitized inventory of the installed device page
 before parity sign-off; expand this matrix if it reveals another required function.
 
 | Required function | Shelly BLE operation to verify | Legitimate standard Matter candidate | HA representation / acceptance test | Status |
 | --- | --- | --- | --- | --- |
-| Measured temperature | Validated BTHome temperature | Thermostat.LocalTemperature, °C ×100 | Climate current temperature; manual/device change propagates without synthesis | Simulated |
+| Measured temperature | Shelly documents repeated BTHome object 0x45 for target, measured and optional external temperature, in that order | Thermostat.LocalTemperature, °C ×100 | Climate current temperature. Decode the measured field, compare to the valve and test missing or stale packets | Simulated. Physical decoding pending |
 | Target temperature | Bonded target GATT / TRV.SetTarget | OccupiedHeatingSetpoint | Climate target; readback matches, range/units checked | Real GATT read/units passed; real writes/Matter telemetry pending |
 | Control mode | Enabled-functions flags / vendor configuration; explicit USB valve-only setup clears bit 0 with full-mask readback | Thermostat.SystemMode only for matching Off/Heat semantics; no established standard mapping for automatic-regulator enable | Prove valve-only setup without Shelly app, retention through restart/reset handling; climate Off must not imply closure or change the regulator flag | Already-disabled setting confirmed on hardware after S3 reboot. On-to-off write pending. Matter semantics blocked |
-| Direct percentage command | Bonded position GATT; automatic control disabled | Valve Configuration and Control Open(targetLevel), Close; Level feature | Valve set position; 0/50/100 applied and confirmed | Simulated Matter commands passed. Physical BLE write implemented for explicit USB tests. Movement through the S3 and Matter actuation pending |
-| Confirmed percentage feedback | Position readback / validated telemetry | CurrentLevel separate from TargetLevel | current_position remains actual during delays/failures | [HA displayed the Shelly-commanded position changes. The bridge reported 20%, 0% and restored 18%](validation/2026-11-26-matter-position.md). Direct Matter actuation pending |
-| Battery | Validated BTHome/device telemetry | Power Source.BatPercentRemaining, units 0.5% | Battery sensor; test 0, 50, 100 and unknown | Simulated |
+| Direct percentage command | Bonded position GATT; automatic control disabled | Valve Configuration and Control Open(targetLevel), Close; Level feature | Valve set position; 0/50/100 applied and confirmed | Simulated Matter commands passed. Physical Matter/USB command paths implemented. S3 write acknowledged, immediate 20%, delayed 0%. Sustained opening and full range pending |
+| Confirmed percentage feedback | Position readback / validated telemetry | CurrentLevel separate from TargetLevel | current_position remains actual during delays/failures | [HA displayed the Shelly-commanded position changes. The bridge reported 20%, 0% and restored 18%](validation/2026-11-26-matter-position.md). S3 also detected a 20% to 0% reversal during direct actuation |
+| Battery | Shelly documents BTHome object 0x01 in whole percent | Power Source.BatPercentRemaining, units 0.5% | Battery sensor. Test 0, 50, 100 and unknown, including conversion to half-percent units | Simulated. Physical decoding pending |
 | Availability | Freshness and transport observations | Bridged Device Basic Information.Reachable | Parent and children unavailable after timeout; independently recover | Host tests; HA pending |
 | External temperature input | Bonded external-temperature GATT | **Unresolved writable standard interface**; LocalTemperature is reported data, not an external sensor command | Need legitimate controller service and confirmed input effect | **Release blocker** |
 | Calibration command | Calibration GATT write | **Unresolved standard command** | Initiate calibration without custom cluster or unrelated command | **Release blocker** |

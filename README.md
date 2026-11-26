@@ -2,8 +2,8 @@
 
 An **experimental**, Apache-2.0 gateway prototype for Shelly BLU TRVs: **Matter over
 Thread upstream, BLE downstream**, on the Espressif ESP32-S3 + ESP32-H2 Main Board.
-The prototype includes four simulated TRVs and position reporting for enrolled physical valves. **Full replacement feasibility
-has not been established. Real TRV control through Matter is not implemented.**
+The prototype includes four simulated TRVs and experimental percentage control for enrolled physical valves. **Full gateway replacement
+remains unvalidated.**
 
 **Publication gate:** keep this repository private until a working MVP has been
 validated. Validation of physical valve control and clean onboarding is still pending.
@@ -37,14 +37,14 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 | --- | --- | --- | --- |
 | Temperature, setpoint, Off/Heat | Thermostat | Simulator + Matter model | Host core tests; four HA climates discovered; HA writes pending |
 | Valve percentage and feedback | Valve Configuration and Control, Level feature | Simulator + native Matter delegate + child valve endpoint | Fault tests; four HA valves discovered; HA command and confirmed 60% feedback; conformance pending |
-| Physical valve position | Valve Configuration and Control, CurrentLevel and CurrentState | Encrypted GATT reads on a separately identified Matter endpoint. Movement commands are rejected | [HA displayed physical position changes through 20%, 0% and restored 18%. Endpoint and bond recovered after S3 reboot](docs/validation/2026-11-26-matter-position.md) |
+| Physical valve position | Valve Configuration and Control, CurrentLevel and CurrentState | Standard Open/Close on a separately identified Matter endpoint, with bonded GATT preflight and readback | [HA displayed physical position changes through 20%, 0% and restored 18%. Endpoint and bond recovered after S3 reboot](docs/validation/2026-11-26-matter-position.md) |
 | Battery | Power Source | Simulated percentage | Battery entities discovered in HA |
 | Identity, availability | Bridged Device Basic Information | Stable slots + separate NVS identity | Host tests and unchanged identity partition across reboot; commissioning/OTA persistence pending |
 | Thread FTD without Wi-Fi | S3 host / H2 UART RCP | Build configuration and runtime setup | Commissioned in HA, elected Thread router; Wi-Fi uninitialized |
 | BLE after commissioning | NimBLE central/observer | Scan diagnostics and bonded GATT client | Post-HA scanning and reads on one real TRV while attached to Thread |
 | Real TRV discovery/read | Shelly manufacturer metadata and direct GATT | Bounded USB discovery and read probe | Six candidates discovered; one installed 1.5.0 valve paired and all five protected-session reads passed |
 | Direct enrollment and valve-only setup | USB configuration, bonded GATT | Persistent peer reservations/bonds; explicit regulator-disable command with readback | [One installed TRV reconnected after S3 reboot](docs/validation/2026-11-25-first-bond.md); already-disabled regulator confirmed. Actual flag change and clean onboarding pending |
-| Direct physical position command | USB development console | One bonded write with a fresh starting-position check and immediate and delayed readback | [USB guard tests](docs/validation/2026-11-26-matter-position.md). Testing S3-commanded movement is pending |
+| Direct physical position command | USB development console | One bonded write with a fresh starting-position check and immediate and delayed readback | [USB guard tests](docs/validation/2026-11-26-matter-position.md). S3-commanded 20% read back immediately, then reverted to 0% after 12 seconds |
 | Gateway OTA | Matter OTA Requestor | Enabled; two S3 slots and boot rollback check | Installation/rollback pending |
 | Maintenance and TRV updates | Standard mappings under investigation | Documentation only | Release blockers |
 

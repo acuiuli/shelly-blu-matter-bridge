@@ -89,9 +89,16 @@ The NimBLE task posts a dated position sample after verifying the bonded peer an
 decoding its percentage. The Matter task updates CurrentLevel, CurrentState and
 Reachable. Polling targets five minutes. A sample expires at ten minutes and thirty
 seconds. At boot a new observation is required. A failed read cannot refresh the age.
-The physical endpoint rejects Valve cluster commands before the standard handler runs.
-This reporting interval is experimental and unsuitable for confirming a new closure
-in a heating automation. Clean-start onboarding and actuator control require separate tests.
+Each physical endpoint registers a Valve Configuration and Control server for its
+enrollment. Open and Close reserve a single bonded BLE operation and publish the
+requested target while it runs. Repeated or concurrent requests receive Busy when
+the radio is occupied. The target expires when the operation finishes. Confirmed
+levels come from the encrypted TRV reads. Unavailable samples produce a null level.
+The preflight requires a matching enrollment, expected position, disabled regulator,
+successful calibration and clear errors. A command has a 15-second submission
+deadline and is never replayed. Finite-duration commands remain a conformance gap.
+Clean-start onboarding and closure under the installation's heating controls require
+separate validation.
 
 Bonded outbound GATT connections use the S3 controller's public Bluetooth identity.
 The pinned Matter SDK configures a new random static commissioning address at boot.

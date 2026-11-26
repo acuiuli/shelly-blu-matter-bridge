@@ -19,8 +19,8 @@ The [physical position report](2026-11-26-matter-position.md) records Home Assis
 valve through the existing bridge and operator confirmation of the displayed changes
 during a Shelly-commanded movement test. The report includes the initially conflicting
 closure readings, the matching 18% HA action and the independent checks on the
-restored position. It also covers the USB command tested on the S3 without moving
-the valve.
+restored position. It also covers the USB guards and the first bonded write from the S3.
+The valve reported 20% immediately and 0% on the delayed read.
 
 ## Original foundation validation
 

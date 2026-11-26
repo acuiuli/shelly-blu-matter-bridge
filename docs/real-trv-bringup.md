@@ -30,8 +30,7 @@ States. Match the new entity to the Matter integration. The existing Shelly
 integration may also have an entity for the same radiator. Leave its heating
 automations attached to the existing control path during this read-only test.
 
-The physical Matter endpoint rejects valve commands. HA may still show Open, Close
-and position controls. Use `trv_reconnect 0` for an immediate encrypted read and
+The physical Matter endpoint accepts standard Open, Close and percentage commands. Use `trv_reconnect 0` for an immediate encrypted read and
 wait for completion before checking `diag`. Otherwise the bridge polls automatically.
 
 ## 1. Identify and record the baseline
@@ -209,8 +208,7 @@ service. If the valve is under active control, observe a normal heating cycle.
    with the baseline. If another writer takes control, end the test and coordinate
    restoration with the operator.
 
-A position update through this procedure exercises the reporting path. The Matter
-endpoint stays read-only throughout. Its automatic poll interval is five minutes,
+This procedure uses the Matter endpoint only for observation. Its automatic poll interval is five minutes,
 so a brief movement between polls requires an explicit refresh to be seen.
 
 ## 7. Test a direct USB position command
@@ -240,23 +238,22 @@ reopening. Boiler lease decisions remain in HA.
 
 ## 8. Prove direct Matter control
 
-Bind only the selected valve to a reserved slot, preserving Matter identity and
-the other slots. Replace simulated observations only when real fields are known;
-do not fabricate a complete snapshot from partial advertisements. Freshness and
-ordering are per field. Device communications must schedule state changes onto
-the Matter owner task and discard obsolete command tokens before transmission.
-Verify the real device's temperature range against the Matter thermostat attributes
-before binding; this test valve legitimately reports a 4°C target. Control-mode
-semantics also need validation before enabling mode writes.
+Use the physical valve under the Matter integration. Confirm its endpoint with
+`diag` and read its position with `trv_reconnect SLOT` before changing anything.
+Coordinate other writers for this radiator and record its live starting position.
 
-Coordinate the test valve's existing HA/gateway writers before movement tests.
-Test bounded opening/closure with readback, a replaced command, manual changes,
-an absent valve, reconnect and gateway restart. An ATT write acknowledgment is
-transport acceptance; confirmed position must come from a fresh valve observation.
-Retain temperature locking and the boiler lease. Arrange an independence test with
-the original gateway disconnected after the remaining valves' control is covered.
+1. In Developer Tools → Actions choose **Valve: Close** if the valve is already
+   at 0%. Target the Matter valve and run the action. This exercises the command
+   path and both bonded reads without requiring a motor write.
+2. For a movement test choose **Valve: Set valve position** and enter an agreed
+   small opening. Check `trv_position status` over USB for `operation=matter_position`,
+   the acknowledgment and both readbacks. Check the Matter entity's
+   `current_position` in HA. A delayed mismatch ends the request with an error.
+3. Restore the measured starting position using the same Matter entity. Use
+   **Valve: Close** for zero. Record the later read and check HA again.
 
-Record latency, success/failure counts, memory and recovery. Then scale to four
-valves and the pilot. Calibration, external input and vendor firmware updates remain
-separate standard-Matter mapping/implementation gates in the
-[capability matrix](matter-mapping.md); basic position control does not establish parity.
+The bridge accepts one BLE operation at a time. A busy request must be issued
+again by the caller after fresh feedback. Finite timed opens and finite default
+durations are unsupported in this prototype. Verify concurrent clients, an absent
+valve, restart, and operation with the original gateway absent for this radiator
+before using this control in an automation.

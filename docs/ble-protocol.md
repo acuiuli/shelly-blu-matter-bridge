@@ -2,7 +2,8 @@
 
 The [vendor BLU TRV documentation](https://shelly-api-docs.shelly.cloud/docs-ble/Devices/BLU_ZB/trv/)
 describes periodic BTHome observations and bonded GATT access. The bridge polls the bonded peer's position characteristic and publishes validated
-percentages on its physical Matter endpoint. Bounded discovery, a non-bonding read-only GATT probe,
+percentages on its physical Matter endpoint. The standard Open and Close commands
+use a single write to the same characteristic with immediate and delayed reads. Bounded discovery, a non-bonding read-only GATT probe,
 experimental persistent enrollment and explicit valve-only configuration are
 available; see [one-valve bring-up](real-trv-bringup.md) and the
 [first direct read](validation/2026-11-24-real-trv-read.md). Do not confuse older Wi-Fi Shelly TRVs with the BLU model, or

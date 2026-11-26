@@ -3,11 +3,13 @@
 #include "trv_binding_store.h"
 #include "trv_gatt_probe.h"
 #include <app/clusters/valve-configuration-and-control-server/CodegenIntegration.h>
-#include <app/util/MatterCallbacks.h>
+#include <clusters/ValveConfigurationAndControl/Commands.h>
 #include <cstdio>
 #include <cstring>
+#include <data_model_provider/esp_matter_data_model_provider.h>
 #include <esp_log.h>
 #include <esp_matter.h>
+#include <esp_timer.h>
 #include <nvs.h>
 
 namespace {
@@ -20,6 +22,8 @@ constexpr uint64_t stale_ms = poll_ms * 2 + 30000;
 struct Feed {
     std::optional<bridge::EnrollmentId> binding;
     bridge::PositionObservation sample;
+    uint32_t completions = 0;
+    int last_result = -1;
 };
 std::array<Feed, capacity> feeds;
 portMUX_TYPE feed_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -31,32 +35,160 @@ struct Published {
     uint64_t next_poll = 0;
     uint64_t last_publish = 0;
     uint32_t blocked_commands = 0;
+    bool registered = false;
 };
 std::array<Published, capacity> devices;
-class ReadOnlyPhysicalValves final : public chip::DataModelCallbacks {
+Feed get_feed(size_t slot);
+using namespace chip::app;
+namespace Valve = ValveConfigurationAndControl;
+using chip::Protocols::InteractionModel::Status;
+
+// Each registered server belongs to one enrolled valve. The SDK implements the
+// standard attribute metadata and confirmed state. Pending commands live in RAM.
+class PhysicalValve final : public ValveConfigurationAndControlCluster {
   public:
-    chip::DataModelCallbacks *previous = nullptr;
-    CHIP_ERROR PreCommandReceived(const chip::app::ConcreteCommandPath &path,
-                                  const chip::Access::SubjectDescriptor &subject) override {
-        for (auto &device : devices) {
-            if (device.ep != chip::kInvalidEndpointId && device.ep == path.mEndpointId &&
-                path.mClusterId == ValveConfigurationAndControl::Id) {
-                ++device.blocked_commands;
-                return CHIP_ERROR_INCORRECT_STATE;
-            }
+    PhysicalValve(uint16_t ep, size_t slot)
+        : ValveConfigurationAndControlCluster(ep, {chip::BitFlags<Valve::Feature>(Valve::Feature::kLevel),
+                                                   OptionalAttributeSet(0),
+                                                   {{}, 100, 1},
+                                                   nullptr,
+                                                   nullptr}),
+          slot_(slot) {}
+
+    std::optional<DataModel::ActionReturnStatus> InvokeCommand(const DataModel::InvokeRequest &request,
+                                                               chip::TLV::TLVReader &input,
+                                                               CommandHandler *) override {
+        uint8_t target = 0;
+        if (request.path.mCommandId == Valve::Commands::Open::Id) {
+            Valve::Commands::Open::DecodableType args;
+            ReturnErrorOnFailure(args.Decode(input));
+            if (args.openDuration.HasValue() && !args.openDuration.Value().IsNull())
+                return Status::ConstraintError;
+            target = args.targetLevel.ValueOr(100);
+            if (target == 0 || target > 100)
+                return Status::ConstraintError;
+        } else if (request.path.mCommandId == Valve::Commands::Close::Id) {
+            Valve::Commands::Close::DecodableType args;
+            ReturnErrorOnFailure(args.Decode(input));
+        } else {
+            return Status::UnsupportedCommand;
         }
-        return previous->PreCommandReceived(path, subject);
+        auto &d = devices[slot_];
+        auto feed = get_feed(slot_);
+        const auto level = feed.sample.current(d.identity, esp_timer_get_time() / 1000, stale_ms);
+        if (!level || feed.binding != d.identity || !d.reachable) {
+            ++d.blocked_commands;
+            return Status::InvalidInState;
+        }
+        if (pending_ || !queue_matter_position(slot_, d.identity, *level, target)) {
+            ++d.blocked_commands;
+            return Status::Busy;
+        }
+        completion_at_start_ = feed.completions;
+        set_pending(target);
+        return Status::Success;
     }
-    void PostCommandReceived(const chip::app::ConcreteCommandPath &path,
-                             const chip::Access::SubjectDescriptor &subject) override {
-        previous->PostCommandReceived(path, subject);
+
+    DataModel::ActionReturnStatus ReadAttribute(const DataModel::ReadAttributeRequest &request,
+                                                AttributeValueEncoder &encoder) override {
+        switch (request.path.mAttributeId) {
+        case Valve::Attributes::TargetLevel::Id:
+            return pending_ ? encoder.Encode(*pending_) : encoder.EncodeNull();
+        case Valve::Attributes::TargetState::Id:
+            return pending_ ? encoder.Encode(*pending_ ? Valve::ValveStateEnum::kOpen
+                                                       : Valve::ValveStateEnum::kClosed)
+                            : encoder.EncodeNull();
+        case Valve::Attributes::CurrentState::Id:
+            if (pending_)
+                return encoder.Encode(Valve::ValveStateEnum::kTransitioning);
+            [[fallthrough]];
+        case Valve::Attributes::CurrentLevel::Id:
+            if (!devices[slot_].last_level)
+                return encoder.EncodeNull();
+            break;
+        case Valve::Attributes::DefaultOpenDuration::Id:
+            return encoder.EncodeNull();
+        }
+        return ValveConfigurationAndControlCluster::ReadAttribute(request, encoder);
     }
-    void AttributeOperation(OperationType op, OperationOrder order,
-                            const chip::app::ConcreteAttributePath &path) override {
-        previous->AttributeOperation(op, order, path);
+
+    DataModel::ActionReturnStatus WriteAttribute(const DataModel::WriteAttributeRequest &request,
+                                                 AttributeValueDecoder &decoder) override {
+        if (request.path.mAttributeId == Valve::Attributes::DefaultOpenDuration::Id) {
+            DataModel::Nullable<uint32_t> duration;
+            ReturnErrorOnFailure(decoder.Decode(duration));
+            return duration.IsNull() ? Status::Success : Status::ConstraintError;
+        }
+        return ValveConfigurationAndControlCluster::WriteAttribute(request, decoder);
+    }
+
+    void publish_level(std::optional<uint8_t> level) {
+        auto &last = devices[slot_].last_level;
+        if (last == level)
+            return;
+        const bool validity_changed = last.has_value() != level.has_value();
+        last = level;
+        if (level) {
+            UpdateCurrentLevel(*level);
+            UpdateCurrentState(*level ? Valve::ValveStateEnum::kOpen : Valve::ValveStateEnum::kClosed);
+        }
+        if (validity_changed) {
+            NotifyAttributeChanged(Valve::Attributes::CurrentLevel::Id);
+            NotifyAttributeChanged(Valve::Attributes::CurrentState::Id);
+        }
+    }
+    void reconcile(const Feed &feed) {
+        if (pending_ && (feed.binding != devices[slot_].identity || feed.completions != completion_at_start_))
+            set_pending(std::nullopt);
+    }
+
+  private:
+    size_t slot_;
+    std::optional<uint8_t> pending_;
+    uint32_t completion_at_start_ = 0;
+    void set_pending(std::optional<uint8_t> value) {
+        pending_ = value;
+        NotifyAttributeChanged(Valve::Attributes::TargetLevel::Id);
+        NotifyAttributeChanged(Valve::Attributes::TargetState::Id);
+        NotifyAttributeChanged(Valve::Attributes::CurrentState::Id);
     }
 };
-ReadOnlyPhysicalValves gate;
+
+std::array<LazyRegisteredServerCluster<PhysicalValve>, capacity> servers;
+void start_valve(uint16_t ep) {
+    for (size_t i = 0; i < capacity; ++i) {
+        if (devices[i].ep != ep)
+            continue;
+        if (devices[i].registered)
+            return;
+        auto &s = servers[i];
+        if (!s.IsConstructed())
+            s.Create(ep, i);
+        devices[i].registered =
+            data_model::provider::get_instance().registry().Register(s.Registration()) == CHIP_NO_ERROR;
+        if (!devices[i].registered)
+            s.Destroy();
+        return;
+    }
+}
+void stop_valve(uint16_t ep, ClusterShutdownType reason) {
+    for (size_t i = 0; i < capacity; ++i) {
+        if (devices[i].ep != ep || !servers[i].IsConstructed())
+            continue;
+        if (devices[i].registered) {
+            auto err =
+                data_model::provider::get_instance().registry().Unregister(&servers[i].Cluster(), reason);
+            if (err != CHIP_NO_ERROR) {
+                ESP_LOGE("position", "Could not unregister valve endpoint %u", unsigned(ep));
+                return;
+            }
+            devices[i].registered = false;
+        }
+        if (reason == ClusterShutdownType::kPermanentRemove)
+            servers[i].Destroy();
+        return;
+    }
+}
 constexpr size_t record_size = 2 + bridge::EnrollmentId{}.size();
 using EndpointRecord = std::array<uint8_t, record_size>;
 
@@ -106,7 +238,8 @@ esp_err_t create_endpoint(size_t slot, const bridge::EnrollmentId &id) {
                  cluster::valve_configuration_and_control::feature::level::add(
                      cluster::get(ep, ValveConfigurationAndControl::Id), &level) == ESP_OK &&
                  endpoint::set_parent_endpoint(ep, endpoint::get(1)) == ESP_OK;
-    if (!ready) {
+    if (!ready || cluster::set_init_and_shutdown_callbacks(cluster::get(ep, Valve::Id), start_valve,
+                                                           stop_valve) != ESP_OK) {
         endpoint::destroy(node, ep);
         return ESP_FAIL;
     }
@@ -123,13 +256,14 @@ esp_err_t create_endpoint(size_t slot, const bridge::EnrollmentId &id) {
         }
     }
     // On the Matter task: command dispatch cannot interleave with creation.
-    err = endpoint::enable(ep);
-    if (err != ESP_OK || !ValveConfigurationAndControl::FindClusterOnEndpoint(number)) {
-        endpoint::destroy(node, ep);
-        return ESP_FAIL;
-    }
     devices[slot].identity = id;
     devices[slot].ep = number;
+    err = endpoint::enable(ep);
+    if (err != ESP_OK || !devices[slot].registered) {
+        endpoint::destroy(node, ep);
+        devices[slot] = {};
+        return ESP_FAIL;
+    }
     return ESP_OK;
 }
 Feed get_feed(size_t slot) {
@@ -139,7 +273,6 @@ Feed get_feed(size_t slot) {
     return copy;
 }
 } // namespace
-void install_position_command_gate() { gate.previous = chip::DataModelCallbacks::SetInstance(&gate); }
 void initialize_position_bindings() {
     bridge::Enrollment table;
     if (auto err = load_trv_bindings(table); err != ESP_OK) {
@@ -154,13 +287,22 @@ void observe_trv_position(size_t slot, const bridge::EnrollmentId &id, uint8_t p
     if (slot >= capacity || percent > 100)
         return;
     portENTER_CRITICAL(&feed_lock);
-    feeds[slot] = {id, {id, now_ms, percent}};
+    feeds[slot].binding = id;
+    feeds[slot].sample = {id, now_ms, percent};
     portEXIT_CRITICAL(&feed_lock);
 }
 void expire_trv_position_sample(size_t slot, const bridge::EnrollmentId &id) {
     portENTER_CRITICAL(&feed_lock);
     if (feeds[slot].binding == id)
         feeds[slot].sample = {};
+    portEXIT_CRITICAL(&feed_lock);
+}
+void finish_matter_position(size_t slot, const bridge::EnrollmentId &id, int result) {
+    portENTER_CRITICAL(&feed_lock);
+    if (feeds[slot].binding == id) {
+        ++feeds[slot].completions;
+        feeds[slot].last_result = result;
+    }
     portEXIT_CRITICAL(&feed_lock);
 }
 void invalidate_trv_position(size_t slot) {
@@ -182,16 +324,13 @@ void publish_trv_positions(uint64_t now) {
                 continue;
             }
         }
+        if (!d.registered)
+            continue;
+        auto &server = servers[i].Cluster();
+        server.reconcile(feed);
         const bool bound = feed.binding && *feed.binding == d.identity;
         const auto level = bound ? feed.sample.current(d.identity, now, stale_ms) : std::nullopt;
-        if (level && (!d.reachable || level != d.last_level)) {
-            using namespace ValveConfigurationAndControl;
-            if (UpdateCurrentLevel(d.ep, *level) != CHIP_NO_ERROR ||
-                UpdateCurrentState(d.ep, *level ? ValveStateEnum::kOpen : ValveStateEnum::kClosed) !=
-                    CHIP_NO_ERROR)
-                continue;
-            d.last_level = level;
-        }
+        server.publish_level(level);
         if (level)
             d.last_publish = feed.sample.observed_ms;
         if (level.has_value() != d.reachable) {
@@ -208,12 +347,14 @@ void publish_trv_positions(uint64_t now) {
 void show_trv_positions(uint64_t now) {
     for (size_t i = 0; i < capacity; ++i) {
         const auto &d = devices[i];
+        const auto feed = get_feed(i);
         if (d.ep != chip::kInvalidEndpointId)
             std::printf("Physical TRV slot=%u endpoint=%u reachable=%u confirmed_position=%d age_ms=%lld "
-                        "blocked_commands=%lu\n",
+                        "blocked_commands=%lu matter_completed=%lu last_result=%d\n",
                         unsigned(i), unsigned(d.ep), unsigned(d.reachable),
                         d.reachable && d.last_level ? int(*d.last_level) : -1,
                         d.last_publish ? static_cast<long long>(now - d.last_publish) : -1LL,
-                        static_cast<unsigned long>(d.blocked_commands));
+                        static_cast<unsigned long>(d.blocked_commands),
+                        static_cast<unsigned long>(feed.completions), feed.last_result);
     }
 }

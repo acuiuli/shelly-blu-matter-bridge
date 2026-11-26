@@ -96,9 +96,10 @@ Bounded real-device discovery and a read-only GATT probe are available through
 `trv_discover` and `trv_probe`; see [first real TRV](real-trv-bringup.md). USB enrollment, bonded reconnect and
 physical position reporting are implemented. The explicit valve-only setup command
 has passed its already-disabled case. A change from enabled to disabled still needs
-a test. USB provides an explicit direct position test. Physical movement through
-this interface still needs validation. The physical Matter endpoint reports position
-and rejects movement commands. BTHome telemetry decoding, calibration, external
+a test. The physical Matter endpoint accepts standard Open and Close and reports
+position from the TRV. USB also supports guarded direct commands. One S3 write
+produced 20% on the first read and 0% on the delayed read. Sustained control is
+still under test. BTHome telemetry decoding, calibration, external
 sensor input and TRV updates are pending.
 
 The `ble_scan 10` and `ble_scan status` commands report passive scan results and RSSI

@@ -22,7 +22,7 @@ The Node runtime is declared by each upstream Action; both current Actions use N
 Transitive firmware libraries follow the current stable SDK's version constraints and
 submodule revisions. Compatibility baselines such as Matter Server 9.3.0 and Better
 Thermostat 2.0.0-Beta2 are recorded test targets, not dependencies installed by CI.
-Record the actual controller versions in each hardware report.
+The installation upgraded Better Thermostat to official 2.0.0. Its [client requirements](home-assistant.md) are tracked separately. Record the actual controller versions in each hardware report.
 
 ## What the GitHub workflows do
 

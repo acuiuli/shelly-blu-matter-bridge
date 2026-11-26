@@ -1,15 +1,28 @@
-# Home Assistant migration and Better Thermostat
+# Home Assistant clients and migration
 
-## Compatibility baseline
+The bridge exposes the installed radiator through HA's Matter integration. Which
+software can drive it depends on the entity or protocol that software accepts.
 
-Better Thermostat **2.0.0-Beta2 is a baseline for testing, not an already compatible
-target**. For an original Shelly BLU TRV the native Shelly adapter can write the
-valve-opening number with `number.set_value`. The observed 18% action matches
-that path. [Shelly adapter](https://github.com/KartoffelToby/better_thermostat/blob/2.0.0-Beta2/custom_components/better_thermostat/adapters/shelly.py), [valve write helper](https://github.com/KartoffelToby/better_thermostat/blob/2.0.0-Beta2/custom_components/better_thermostat/adapters/valve_entity.py)
+| Client interface | How it works with the physical TRV |
+| --- | --- |
+| HA automation or thermostat with a percentage-capable `valve` output | Select the physical Matter valve. HA Core 2026.11.3 sends Open with a target for 1–100%, and Close for 0%. Read its `current_position` and availability. [HA implementation](https://github.com/home-assistant/core/blob/2026.11.3/homeassistant/components/matter/valve.py) |
+| Software that selects a `climate` entity and writes a setpoint | Requires the real Thermostat endpoint, measured temperature, supported modes and confirmed setpoint writes. Only simulated climates exist today. |
+| Better Thermostat 2.0.0, as installed for this pilot | The TRV selector requires `climate`. The generic adapter declares `valve_write=False`. Selecting the new physical valve as the controlled thermostat is unsupported. [Selector](https://github.com/KartoffelToby/better_thermostat/blob/2.0.0/custom_components/better_thermostat/config_flow.py) · [Generic adapter](https://github.com/KartoffelToby/better_thermostat/blob/2.0.0/custom_components/better_thermostat/adapters/generic.py) |
+| Software calling Shelly gateway RPC or the old HA Shelly opening number | These clients address a vendor gateway or a specific HA entity. They need a Matter-capable output or an explicit service/entity migration before the vendor gateway can be retired. [Shelly gateway API](https://shelly-api-docs.shelly.cloud/gen2/Devices/Gen3/ShellyBluGwG3/) |
 
-Its [generic adapter](https://github.com/KartoffelToby/better_thermostat/blob/2.0.0-Beta2/custom_components/better_thermostat/adapters/generic.py)
-does not supply direct valve writes. Its valve-only control behavior must be preserved
-in a separate upstream contribution. No Better Thermostat logic belongs in gateway firmware.
+For each thermostat client, record its version, selected HA entity, outgoing action
+and observed feedback for opening, closure and loss of contact. A climate client
+needs independent setpoint and mode checks. Before retiring the vendor gateway,
+repeat these checks after direct BLE enrollment with the original gateway absent
+for the test valve. Client-specific adapters belong in their
+respective projects. See the [capability matrix](matter-mapping.md).
+
+## Better Thermostat compatibility baseline
+
+2.0.0-Beta2 remains the original comparison baseline. Its generic adapter lacks
+direct valve writes. The installation now uses official 2.0.0. Its native Shelly
+adapter can address an opening number. The recorded 18% HA service action does
+not identify its caller. [Beta2 generic adapter](https://github.com/KartoffelToby/better_thermostat/blob/2.0.0-Beta2/custom_components/better_thermostat/adapters/generic.py) · [Released Shelly adapter](https://github.com/KartoffelToby/better_thermostat/blob/2.0.0/custom_components/better_thermostat/adapters/shelly.py)
 
 Prepare that contribution after HA grouping passes: discover the standard valve entity
 belonging to the same bridged TRV, detect percentage support, use `valve.set_valve_position`
