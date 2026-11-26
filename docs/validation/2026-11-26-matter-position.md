@@ -1,8 +1,10 @@
 # First physical valve position on Matter
 
-On 2026-11-26 the commissioned S3 bridge read a 1.5.0 BLU TRV over its saved BLE
-bond and published its observed 0% position to a dedicated valve endpoint. The
-original Shelly gateway and the installed heating configuration stayed in service.
+On 2026-11-26 Home Assistant discovered the new physical Matter valve on the
+already-commissioned bridge. The operator confirmed that the new **Shelly BLU TRV 1**
+valve entity displayed a `current_position` of **0%**. The S3 obtained that position
+from an installed BLU TRV on firmware 1.5.0 using its saved BLE bond. The original
+Shelly gateway and the installed heating configuration stayed in service.
 The H2 continued running the previously validated RCP image.
 
 ## Board observations
@@ -23,6 +25,10 @@ addition to the physical endpoint, and zero blocked physical commands. The board
 retained its commissioned fabrics. No position, setpoint or regulator write was
 issued in either test.
 
+At 311,773 ms of uptime, a third check found another automatic position read
+completed in 1,823 ms. The sample was 6,978 ms old, reachable and still at 0%.
+The bridge was still a Thread router. No manual refresh was requested.
+
 Only the S3 application partition was flashed, after checking the installed partition
 table and OTA selection. Flash readback verified the 1,601,344-byte application.
 Its SHA-256 is `5ee390dc097a732c58b73dd1e82ffb4b5c46a299f7e9de8698fbcf6c48105183`.
@@ -35,9 +41,8 @@ shows the automatic `position` operation, its security status and which characte
 was read. Restart the S3 and check for the same endpoint and a fresh sample.
 
 In Home Assistant, open the Matter integration and inspect the new valve's
-`current_position`. The default label for slot 0 is **Shelly BLU TRV 1**. Controller
-discovery and the displayed value await confirmation. The existing Shelly integration
-can expose a second entity for the same physical radiator.
+`current_position`. The default label for slot 0 is **Shelly BLU TRV 1**. Select
+the entity under Matter when the Shelly integration also exposes the radiator.
 
 Host tests cover a fresh zero, expiry at the threshold, a renewed sample, invalid
 percentages, source mismatch and a clock earlier than the observation. An absent
