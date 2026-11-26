@@ -187,7 +187,33 @@ fresh readback. Verify operation with no vendor gateway assisting the test valve
 do not disconnect a gateway still needed for the other installed valves. The current
 enrollment commands do not satisfy these Matter/control acceptance steps.
 
-## 6. Bind one slot, then prove control
+## 6. Compare an externally commanded movement with the Matter report
+
+Use an enrolled valve in valve-only mode with a known starting position. Coordinate
+with whoever controls the installed radiator so a second writer cannot change its
+position during the test. Keep the existing boiler lease and temperature lock in
+service. If the valve is under active control, observe a normal heating cycle.
+
+1. Read the position, setpoint, regulator flag and errors through the existing
+   Shelly control. On the bridge, run `trv_reconnect SLOT`, wait for
+   `trv_reconnect status` to show a successful encrypted read, then check `diag`.
+   Record the physical endpoint, position and sample age. In HA, open the Matter
+   valve's `current_position` in Developer Tools → States.
+2. Use the original Shelly control to request the agreed small opening, then
+   closure. After each movement trigger a fresh encrypted read. Record the valve's
+   own percentage, the newly published percentage on the same endpoint and any
+   value observed in HA.
+3. Restore the position measured immediately before the test. If the valve started
+   open, this requires a final command and fresh readback after testing closure.
+   Confirm restoration on both paths and compare the regulator, setpoint and errors
+   with the baseline. If another writer takes control, end the test and coordinate
+   restoration with the operator.
+
+A position update through this procedure exercises the reporting path. The Matter
+endpoint stays read-only throughout. Its automatic poll interval is five minutes,
+so a brief movement between polls requires an explicit refresh to be seen.
+
+## 7. Prove direct control
 
 Bind only the selected valve to a reserved slot, preserving Matter identity and
 the other slots. Replace simulated observations only when real fields are known;

@@ -37,7 +37,7 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 | --- | --- | --- | --- |
 | Temperature, setpoint, Off/Heat | Thermostat | Simulator + Matter model | Host core tests; four HA climates discovered; HA writes pending |
 | Valve percentage and feedback | Valve Configuration and Control, Level feature | Simulator + native Matter delegate + child valve endpoint | Fault tests; four HA valves discovered; HA command and confirmed 60% feedback; conformance pending |
-| Physical valve position | Valve Configuration and Control, CurrentLevel and CurrentState | Encrypted GATT reads on a separately identified Matter endpoint. Movement commands are rejected | [HA discovered one real valve and displayed 0%. Endpoint and bonded read recovered after S3 reboot](docs/validation/2026-11-26-matter-position.md) |
+| Physical valve position | Valve Configuration and Control, CurrentLevel and CurrentState | Encrypted GATT reads on a separately identified Matter endpoint. Movement commands are rejected | [HA displayed physical position changes through 20%, 0% and restored 18%. Endpoint and bond recovered after S3 reboot](docs/validation/2026-11-26-matter-position.md) |
 | Battery | Power Source | Simulated percentage | Battery entities discovered in HA |
 | Identity, availability | Bridged Device Basic Information | Stable slots + separate NVS identity | Host tests and unchanged identity partition across reboot; commissioning/OTA persistence pending |
 | Thread FTD without Wi-Fi | S3 host / H2 UART RCP | Build configuration and runtime setup | Commissioned in HA, elected Thread router; Wi-Fi uninitialized |

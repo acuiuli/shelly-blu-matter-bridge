@@ -16,7 +16,9 @@ S3 identity. The bridge recovered its bond after a hardware reset and read all
 five fields, including the valve's protected error register.
 
 The [physical position report](2026-11-26-matter-position.md) records Home Assistant discovery of a physical
-valve through the existing bridge and a displayed position matching encrypted readback.
+valve through the existing bridge and operator confirmation of the displayed changes
+during a Shelly-commanded movement test. The report includes the initially conflicting
+closure readings and the independent checks on the restored position.
 
 ## Original foundation validation
 

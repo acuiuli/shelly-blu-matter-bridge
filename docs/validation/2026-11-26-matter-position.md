@@ -33,6 +33,40 @@ Only the S3 application partition was flashed, after checking the installed part
 table and OTA selection. Flash readback verified the 1,601,344-byte application.
 Its SHA-256 is `5ee390dc097a732c58b73dd1e82ffb4b5c46a299f7e9de8698fbcf6c48105183`.
 
+## Position feedback during a Shelly-commanded movement
+
+Better Thermostat was idle for this test. Before sending a movement command, both
+gateways measured an opening of 18%. The test used that live value for restoration.
+The Shelly gateway sent all movement commands. The S3 read the valve over its own
+BLE bond and updated Matter endpoint 10. The operator saw the sequence in Home
+Assistant on **Shelly BLU TRV 1**.
+
+| Stage | Matter position after fresh BLE read | Shelly `TRV.GetStatus.pos` | BLE read duration |
+| --- | --- | --- | --- |
+| Live baseline | 18% | 18% | 9,018 ms |
+| Open to 20% | 20% | 20% | 1,977 ms |
+| Close to 0% | 0% | 18% two seconds later | 1,981 ms |
+| Restore the original position | 18% | 18% | 1,654 ms |
+
+The S3 completed an encrypted reconnect and five reads per observation. The
+duration above measures that transaction. The first closure check ended when the
+Shelly status disagreed with the bridge. Its 18% reading preceded the restore
+command. The setpoint stayed at 4°C, automatic temperature control remained off,
+and the valve reported successful calibration and no errors.
+
+On a second closure check, the test sent one close command and no restore command.
+Shelly reported 0% at 17:03:29 CET and the S3 reported 0% at 17:03:33. At
+17:03:38 Shelly reported 18%, followed by an encrypted S3 read of 18% at
+17:03:41. The test stopped on the live starting position. The two paths therefore
+confirmed a transient closure. A single zero reading is insufficient evidence of
+sustained closure for the boiler lease.
+
+A read-only check at 17:04:44 CET still found 18%, a 4°C target, minimum opening
+0%, automatic regulation off and no errors. The valve listed zero onboard schedule
+rules and reported no active boost or temperature override. The source of the
+return to 18% remains open. The original Shelly integration and boiler controls
+were in service throughout. [Shelly TRV status and configuration fields](https://shelly-api-docs.shelly.cloud/docs-ble/Devices/BLU_ZB/trv/#trvgetstatus)
+
 ## Reproduction and outstanding checks
 
 On an already commissioned bridge with one verified valve, run `diag` and
@@ -46,6 +80,6 @@ the entity under Matter when the Shelly integration also exposes the radiator.
 
 Host tests cover a fresh zero, expiry at the threshold, a renewed sample, invalid
 percentages, source mismatch and a clock earlier than the observation. An absent
-physical valve, HA's behavior upon expiry, a nonzero reading after movement, clean
+physical valve, HA's behavior upon expiry, direct actuation through Matter, clean
 onboarding and operation with the original gateway offline still need hardware tests.
 The physical valve rejects movement commands in this build. [Bring-up procedure](../real-trv-bringup.md)
