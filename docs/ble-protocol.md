@@ -21,7 +21,9 @@ USB enrollment uses the SDK's existing NVS bond store and a separate versioned
 physical-peer reservation. Initial Just Works enrollment does not claim MITM
 authentication. PIN-protected devices are rejected. Mode configuration requires a
 verified binding and encrypted bonded access; it never changes mode as an implicit
-side effect of a percentage command. No position/setpoint writes exist yet.
+side effect of a percentage command. The explicit USB position test requires the
+verified peer, fresh valve-only status and an expected starting percentage. It
+can write the position once. Setpoint writes remain pending.
 
 First prove one valve can bond, read, write and reconnect with the original gateway
 powered off. Store bonding material in secure device storage and keep it out of ordinary

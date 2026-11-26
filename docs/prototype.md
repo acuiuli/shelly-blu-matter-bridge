@@ -34,7 +34,7 @@ and initialize the new application data partitions before starting this firmware
 With one cable, hold the S3 BOOT button while moving power between USB ports to
 prevent the factory host from automatically replacing the newly flashed H2 RCP.
 
-The firmware creates four simulated TRVs. No real valve is controlled. Commission it
+The firmware creates four simulated TRVs. Their controls operate the simulators. Commission it
 as described in [commissioning](commissioning.md), then try climate setpoints and
 valve percentage commands in Home Assistant. Read reported position independently.
 On the S3 USB console (slots are zero-based):
@@ -96,8 +96,10 @@ Bounded real-device discovery and a read-only GATT probe are available through
 `trv_discover` and `trv_probe`; see [first real TRV](real-trv-bringup.md). USB enrollment, bonded reconnect and
 physical position reporting are implemented. The explicit valve-only setup command
 has passed its already-disabled case. A change from enabled to disabled still needs
-a test. Real motor commands, BTHome telemetry decoding, calibration, external sensor
-input and TRV updates are pending.
+a test. USB provides an explicit direct position test. Physical movement through
+this interface still needs validation. The physical Matter endpoint reports position
+and rejects movement commands. BTHome telemetry decoding, calibration, external
+sensor input and TRV updates are pending.
 
 The `ble_scan 10` and `ble_scan status` commands report passive scan results and RSSI
 bounds without addresses or payloads. Scanning and bonded reads have passed after HA

@@ -18,7 +18,9 @@ five fields, including the valve's protected error register.
 The [physical position report](2026-11-26-matter-position.md) records Home Assistant discovery of a physical
 valve through the existing bridge and operator confirmation of the displayed changes
 during a Shelly-commanded movement test. The report includes the initially conflicting
-closure readings and the independent checks on the restored position.
+closure readings, the matching 18% HA action and the independent checks on the
+restored position. It also covers the USB command tested on the S3 without moving
+the valve.
 
 ## Original foundation validation
 

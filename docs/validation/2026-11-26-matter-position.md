@@ -35,7 +35,7 @@ Its SHA-256 is `5ee390dc097a732c58b73dd1e82ffb4b5c46a299f7e9de8698fbcf6c48105183
 
 ## Position feedback during a Shelly-commanded movement
 
-Better Thermostat was idle for this test. Before sending a movement command, both
+The operator saw Better Thermostat displaying idle during this test. Before sending a movement command, both
 gateways measured an opening of 18%. The test used that live value for restoration.
 The Shelly gateway sent all movement commands. The S3 read the valve over its own
 BLE bond and updated Matter endpoint 10. The operator saw the sequence in Home
@@ -63,9 +63,39 @@ sustained closure for the boiler lease.
 
 A read-only check at 17:04:44 CET still found 18%, a 4°C target, minimum opening
 0%, automatic regulation off and no errors. The valve listed zero onboard schedule
-rules and reported no active boost or temperature override. The source of the
-return to 18% remains open. The original Shelly integration and boiler controls
-were in service throughout. [Shelly TRV status and configuration fields](https://shelly-api-docs.shelly.cloud/docs-ble/Devices/BLU_ZB/trv/#trvgetstatus)
+rules and reported no active boost or temperature override.
+
+Home Assistant action history subsequently showed a
+`number.set_value` request of 18 on the original Shelly valve-opening entity at
+17:03:34 CET, one second after the S3 zero and four seconds before Shelly reported
+18%. HA identifies the action as “Via Number” and offered no trace. This confirms
+the outgoing HA request. Better Thermostat's Beta2 Shelly adapter uses that action,
+so it is a possible initiator. The available action context does not identify the
+upstream caller. [Better Thermostat Shelly adapter](https://github.com/KartoffelToby/better_thermostat/blob/2.0.0-Beta2/custom_components/better_thermostat/adapters/shelly.py)
+and [HA action history](https://www.home-assistant.io/docs/tools/dev-tools/#action-history-tab).
+
+The original Shelly integration and boiler controls were in service throughout. [Shelly TRV status and configuration fields](https://shelly-api-docs.shelly.cloud/docs-ble/Devices/BLU_ZB/trv/#trvgetstatus)
+
+## Direct USB command checks
+
+A subsequent S3 application build added the local `trv_position` command.
+Flash readback verified the 1,603,312-byte image with SHA-256
+`65065c01f54258658557fb126175feb8e1aff81c9d56bb89781a4c216b1a9c65`. The board recovered its existing fabric, all four simulator slots
+and physical endpoint 10.
+
+| USB check | Board result |
+| --- | --- |
+| Out-of-range percentage | Rejected before queuing |
+| Empty enrollment slot | Rejected before a bonded read or write |
+| Starting position differs from the encrypted read | Rejected, zero writes submitted |
+| Expected and requested position both 0% | Zero writes submitted. Initial and delayed reads both returned 0%, completing in 18,856 ms |
+| Retrieve the result during another BLE operation | Previous USB command result and both readbacks still available |
+
+Host tests covered the write decision, request expiry, reuse of consumed intent,
+an enabled or unread regulator, missing telemetry, calibration and fault status.
+The tests on the installed valve exercised the guards and both encrypted readbacks.
+A real change in opening issued by the S3 still needs a coordinated movement test.
+[USB procedure](../real-trv-bringup.md#7-test-a-direct-usb-position-command)
 
 ## Reproduction and outstanding checks
 

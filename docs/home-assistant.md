@@ -3,7 +3,11 @@
 ## Compatibility baseline
 
 Better Thermostat **2.0.0-Beta2 is a baseline for testing, not an already compatible
-target**. Its [generic adapter](https://github.com/KartoffelToby/better_thermostat/blob/2.0.0-Beta2/custom_components/better_thermostat/adapters/generic.py)
+target**. For an original Shelly BLU TRV the native Shelly adapter can write the
+valve-opening number with `number.set_value`. The observed 18% action matches
+that path. [Shelly adapter](https://github.com/KartoffelToby/better_thermostat/blob/2.0.0-Beta2/custom_components/better_thermostat/adapters/shelly.py), [valve write helper](https://github.com/KartoffelToby/better_thermostat/blob/2.0.0-Beta2/custom_components/better_thermostat/adapters/valve_entity.py)
+
+Its [generic adapter](https://github.com/KartoffelToby/better_thermostat/blob/2.0.0-Beta2/custom_components/better_thermostat/adapters/generic.py)
 does not supply direct valve writes. Its valve-only control behavior must be preserved
 in a separate upstream contribution. No Better Thermostat logic belongs in gateway firmware.
 

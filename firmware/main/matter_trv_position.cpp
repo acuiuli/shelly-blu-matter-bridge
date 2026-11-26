@@ -157,6 +157,12 @@ void observe_trv_position(size_t slot, const bridge::EnrollmentId &id, uint8_t p
     feeds[slot] = {id, {id, now_ms, percent}};
     portEXIT_CRITICAL(&feed_lock);
 }
+void expire_trv_position_sample(size_t slot, const bridge::EnrollmentId &id) {
+    portENTER_CRITICAL(&feed_lock);
+    if (feeds[slot].binding == id)
+        feeds[slot].sample = {};
+    portEXIT_CRITICAL(&feed_lock);
+}
 void invalidate_trv_position(size_t slot) {
     portENTER_CRITICAL(&feed_lock);
     feeds[slot] = {};

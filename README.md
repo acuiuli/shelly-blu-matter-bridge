@@ -44,6 +44,7 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 | BLE after commissioning | NimBLE central/observer | Scan diagnostics and bonded GATT client | Post-HA scanning and reads on one real TRV while attached to Thread |
 | Real TRV discovery/read | Shelly manufacturer metadata and direct GATT | Bounded USB discovery and read probe | Six candidates discovered; one installed 1.5.0 valve paired and all five protected-session reads passed |
 | Direct enrollment and valve-only setup | USB configuration, bonded GATT | Persistent peer reservations/bonds; explicit regulator-disable command with readback | [One installed TRV reconnected after S3 reboot](docs/validation/2026-11-25-first-bond.md); already-disabled regulator confirmed. Actual flag change and clean onboarding pending |
+| Direct physical position command | USB development console | One bonded write with a fresh starting-position check and immediate and delayed readback | [USB guard tests](docs/validation/2026-11-26-matter-position.md). Testing S3-commanded movement is pending |
 | Gateway OTA | Matter OTA Requestor | Enabled; two S3 slots and boot rollback check | Installation/rollback pending |
 | Maintenance and TRV updates | Standard mappings under investigation | Documentation only | Release blockers |
 

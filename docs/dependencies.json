@@ -738,7 +738,7 @@
   ],
   "application": {
     "path": "firmware/build/shelly_blu_bridge.bin",
-    "sha256": "5ee390dc097a732c58b73dd1e82ffb4b5c46a299f7e9de8698fbcf6c48105183"
+    "sha256": "65065c01f54258658557fb126175feb8e1aff81c9d56bb89781a4c216b1a9c65"
   },
   "build_components": [
     "app_update",
@@ -1350,7 +1350,7 @@
     {
       "target": "esp32s3",
       "path": "esp-idf/main/libmain.a",
-      "sha256": "91662605f925c17183ed8e039510a97e4a5b90465b2d94f96023f2a01e8ea398",
+      "sha256": "7adbe8695aed4152d34d7d7bbfed5e44c4053ef555d553d82ed93eae6fed5e63",
       "notice_review": "required"
     },
     {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "bridge/position_observation.hpp"
+#include "bridge/trv_position_write.hpp"
 #include "bridge/trv_readback.hpp"
 #include <cstdlib>
 #include <iostream>
@@ -13,6 +14,38 @@
     } while (false)
 using namespace bridge;
 int main() {
+    using Decision = PositionDecision;
+    const std::array<std::optional<int>, size_t(TrvReadField::count)> live{400, 18, 1, 160, 0};
+    TrvPositionWrite close{18, 0, 15000};
+    CHECK(close.take(live, 14999) == Decision::write);
+    CHECK(close.take(live, 14999) == Decision::reject);
+    const TrvPositionWrite request{18, 20, 15000};
+    auto decide = [request](auto fields, uint64_t when = 1) {
+        auto once = request;
+        return once.take(fields, when);
+    };
+    CHECK(decide(live, 15000) == Decision::reject);
+    CHECK(decide(live, 0) == Decision::write);
+    TrvPositionWrite noop{18, 18, 15000};
+    CHECK(noop.take(live, 1) == Decision::already_at_target);
+    CHECK(noop.take(live, 1) == Decision::reject);
+    for (const int invalid_target : {-1, 101}) {
+        TrvPositionWrite malformed{18, invalid_target, 15000};
+        CHECK(malformed.take(live, 1) == Decision::reject);
+    }
+    for (auto field :
+         {TrvReadField::position, TrvReadField::functions, TrvReadField::calibration, TrvReadField::errors}) {
+        auto fields = live;
+        fields[size_t(field)].reset();
+        CHECK(decide(fields) == Decision::reject);
+        if (field == TrvReadField::functions)
+            fields[size_t(field)] = 161;
+        else if (field == TrvReadField::errors)
+            fields[size_t(field)] = 1;
+        else
+            fields[size_t(field)] = 0;
+        CHECK(decide(fields) == Decision::reject);
+    }
     EnrollmentId valve{1}, other{2};
     PositionObservation reading{};
     CHECK(!reading.current(valve, 20, 100));

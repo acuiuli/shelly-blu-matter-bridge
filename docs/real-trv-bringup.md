@@ -213,7 +213,32 @@ A position update through this procedure exercises the reporting path. The Matte
 endpoint stays read-only throughout. Its automatic poll interval is five minutes,
 so a brief movement between polls requires an explicit refresh to be seen.
 
-## 7. Prove direct control
+## 7. Test a direct USB position command
+
+Use `trv_position SLOT EXPECTED_PERCENT TARGET_PERCENT` on the private USB
+console. Inspect completion with `trv_position status`. For a no-movement check,
+pass the observed position for both percentages. A differing live value rejects
+the request. An equal live value returns success without sending a motor command.
+
+For a movement test, coordinate the existing controller first. The bridge rejects
+a busy connection, an unverified slot, an enabled regulator, a calibration or
+device fault, a changed starting position, or a request that reaches the write
+step 15 seconds after submission. The preflight and write are separate BLE
+operations. An independent controller can still intervene. The USB request runs
+once and is never stored or automatically retried.
+
+`submitted` and `acknowledged` record whether the position write was sent and accepted.
+`first` is a freshly decoded position and `later` is another read scheduled
+12 seconds later on the same encrypted connection. An equal-position request
+also performs both readbacks. USB status retains the last position command result
+until the next one or reboot. Each valid observation is
+published to Matter. A final mismatch returns an error while retaining the actual
+position. A missing final read marks the prior publication unavailable until a
+fresh poll. A value of -1 in the USB readbacks means no reading was obtained for
+that phase. The prototype interval was chosen to cover the observed nine-second
+reopening. Boiler lease decisions remain in HA.
+
+## 8. Prove direct Matter control
 
 Bind only the selected valve to a reserved slot, preserving Matter identity and
 the other slots. Replace simulated observations only when real fields are known;
