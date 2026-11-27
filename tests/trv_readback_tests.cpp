@@ -3,6 +3,7 @@
 #include "bridge/trv_position_write.hpp"
 #include "bridge/trv_readback.hpp"
 #include "bridge/trv_sensor_sample.hpp"
+#include "bridge/trv_setpoint.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <vector>
@@ -16,6 +17,29 @@
     } while (false)
 using namespace bridge;
 int main() {
+    const TrvClimate manual{2000, 160, 500, 2900};
+    const TrvClimate automatic{2000, 161, 500, 2900};
+    CHECK(manual.accepts(500) && manual.accepts(2900));
+    CHECK(!manual.accepts(490) && !manual.accepts(2910) && !manual.accepts(2055));
+    TrvSetpointWrite setpoint{2000, 2050, 160, 100};
+    CHECK(setpoint.take(manual, 99) == SetpointDecision::write);
+    CHECK(setpoint.take(manual, 99) == SetpointDecision::reject);
+    CHECK(!setpoint.confirmed(manual));
+    auto changed_target = manual;
+    changed_target.target = 2050;
+    CHECK(setpoint.confirmed(changed_target));
+    changed_target.functions ^= 2;
+    CHECK(!setpoint.confirmed(changed_target));
+    for (const auto &request :
+         {TrvSetpointWrite{1950, 2050, 160, 100}, TrvSetpointWrite{2000, 2050, 161, 100},
+          TrvSetpointWrite{2000, 499, 160, 100}, TrvSetpointWrite{2000, 2050, 160, 99}}) {
+        auto attempt = request;
+        CHECK(attempt.take(manual, 99) == SetpointDecision::reject);
+    }
+    TrvSetpointWrite already{1950, 2000, 160, 100};
+    CHECK(already.take(manual, 90) == SetpointDecision::verify);
+    TrvSetpointWrite heat{2000, 2150, 161, 100};
+    CHECK(heat.take(automatic, 90) == SetpointDecision::write);
     using Decision = PositionDecision;
     const std::array<std::optional<int>, size_t(TrvReadField::count)> live{400, 18, 1, 160, 0};
     TrvPositionWrite close{18, 0, 15000};

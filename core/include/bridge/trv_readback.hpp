@@ -5,7 +5,16 @@
 #include <optional>
 
 namespace bridge {
-enum class TrvReadField : uint8_t { target, position, calibration, functions, errors, count };
+enum class TrvReadField : uint8_t {
+    target,
+    position,
+    calibration,
+    functions,
+    errors,
+    min_target,
+    max_target,
+    count
+};
 // Target temperature is returned in centidegrees Celsius, position in percent,
 // and status bitmasks unchanged. Confirming a pending command additionally needs
 // transport freshness and intent correlation in the reconciliation layer.

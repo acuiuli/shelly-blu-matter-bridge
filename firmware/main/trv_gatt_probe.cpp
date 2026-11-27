@@ -29,10 +29,12 @@
 
 namespace {
 constexpr size_t field_count = size_t(bridge::TrvReadField::count);
-const char *names[] = {"target_centi_c", "position", "calibration", "functions", "errors"};
+const char *names[] = {"target_centi_c", "position",           "calibration",       "functions",
+                       "errors",         "min_target_centi_c", "max_target_centi_c"};
 const char *uuids[] = {"4936d0ba-ff05-472c-907b-6551898fc016", "c3020a1d-f05b-4430-b2e9-f97df761c33b",
                        "6db6f15e-43d6-425e-8669-5b449ab08250", "7ff16da2-6f68-4dc6-a97a-bee89d36e739",
-                       "00a347f9-4a0a-4ad4-a2d5-1cc01f9b3fe8"};
+                       "00a347f9-4a0a-4ad4-a2d5-1cc01f9b3fe8", "a4e3b1d7-7c92-4f38-b5a1-1d2e3f4a5b6c",
+                       "b5f4c2e8-8da3-5049-c6b2-2e3f4a5b6c7d"};
 enum class Phase { idle, queued, connecting, security, services, reading, configuring, disconnecting, done };
 const char *phases[] = {"idle",    "queued",      "connecting",    "security", "services",
                         "reading", "configuring", "disconnecting", "done"};
@@ -44,10 +46,11 @@ enum class Operation {
     repair,
     position,
     set_position,
-    matter_position
+    matter_position,
+    matter_setpoint
 };
-const char *operations[] = {"probe",  "enroll",   "reconnect",    "valve_only",
-                            "repair", "position", "set_position", "matter_position"};
+const char *operations[] = {"probe",    "enroll",       "reconnect",       "valve_only",     "repair",
+                            "position", "set_position", "matter_position", "matter_setpoint"};
 bool writes_position(Operation op) {
     return op == Operation::set_position || op == Operation::matter_position;
 }
@@ -68,6 +71,7 @@ struct Snapshot {
     std::optional<int> sensor_result;
 };
 Snapshot snapshot;
+std::optional<Snapshot> last_setpoint;
 std::array<std::optional<Snapshot>, 2> position_history; // newest completed command first
 portMUX_TYPE snapshot_lock = portMUX_INITIALIZER_UNLOCKED;
 std::atomic<bool> active{false};
@@ -75,6 +79,9 @@ ble_npl_event start_event;
 ble_npl_callout timeout;
 ble_npl_callout position_followup;
 bridge::TrvPositionWrite position_request;
+bridge::TrvSetpointWrite setpoint_request;
+bool verifying_setpoint = false;
+bool setpoint_observed_after_write = false;
 bridge::EnrollmentId requested_identity{};
 ble_addr_t peer;
 ble_uuid_any_t service_uuid;
@@ -85,6 +92,7 @@ std::array<uint16_t, field_count> handles{};
 uint16_t connection = BLE_HS_CONN_HANDLE_NONE;
 uint16_t service_start = 0, service_end = 0;
 size_t reading = 0;
+constexpr size_t first_limit = size_t(bridge::TrvReadField::min_target);
 constexpr size_t position_field = size_t(bridge::TrvReadField::position);
 uint64_t position_observed_ms = 0;
 unsigned successes = 0;
@@ -135,6 +143,8 @@ void finish(int result) {
     ble_npl_callout_stop(&position_followup);
     if (writes_position(operation) && snapshot.submitted && !snapshot.later_position)
         expire_trv_position_sample(selected_slot, bindings.slots[selected_slot].identity);
+    if (operation == Operation::matter_setpoint && snapshot.submitted && !setpoint_observed_after_write)
+        observe_trv_climate(selected_slot, requested_identity, std::nullopt);
     if (bonding_overridden) {
         ble_hs_cfg.sm_bonding = saved_bonding;
         bonding_overridden = false;
@@ -144,6 +154,8 @@ void finish(int result) {
     snapshot.phase = Phase::done;
     snapshot.result = result;
     snapshot.elapsed_ms = uint64_t(esp_timer_get_time() / 1000) - started_ms;
+    if (operation == Operation::matter_setpoint)
+        last_setpoint = snapshot;
     if (writes_position(operation)) {
         position_history[1] = position_history[0];
         position_history[0] = snapshot;
@@ -297,14 +309,80 @@ int sample_read(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *attr,
     finish_sensor_read(error->status ? error->status : (sample ? 0 : BLE_HS_EBADDATA), sample);
     return 0;
 }
+// Limits are optional on older firmware. A partial or unreadable pair is not usable.
+std::optional<bridge::TrvClimate> climate_readback() {
+    const auto &v = snapshot.values;
+    if (!v[0] || !v[3])
+        return std::nullopt;
+    const bool limits = handles[first_limit] || handles[first_limit + 1];
+    if (limits && (!v[first_limit] || !v[first_limit + 1]))
+        return std::nullopt;
+    bridge::TrvClimate state{*v[0], uint16_t(*v[3]),
+                             v[first_limit].value_or(bridge::TrvClimate::absolute_min),
+                             v[first_limit + 1].value_or(bridge::TrvClimate::absolute_max)};
+    if (state.minimum >= state.maximum)
+        return std::nullopt;
+    return state;
+}
+void verify_setpoint() {
+    verifying_setpoint = true;
+    reading = successes = 0;
+    portENTER_CRITICAL(&snapshot_lock);
+    snapshot.values = {};
+    snapshot.status.fill(-1);
+    portEXIT_CRITICAL(&snapshot_lock);
+    phase(Phase::reading);
+    next_read();
+}
+int setpoint_written(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *, void *) {
+    if (!active.load() || stopping || conn != connection || operation != Operation::matter_setpoint)
+        return 0;
+    if (error->status || !secure_peer()) {
+        disconnect(error->status ? error->status : BLE_HS_EAUTHEN);
+        return 0;
+    }
+    portENTER_CRITICAL(&snapshot_lock);
+    snapshot.acknowledged = true;
+    portEXIT_CRITICAL(&snapshot_lock);
+    verify_setpoint();
+    return 0;
+}
+void apply_setpoint(const bridge::TrvClimate &live) {
+    if (verifying_setpoint) {
+        setpoint_observed_after_write = true;
+        disconnect(setpoint_request.confirmed(live) ? 0 : BLE_HS_EAGAIN);
+        return;
+    }
+    switch (setpoint_request.take(live, esp_timer_get_time() / 1000)) {
+    case bridge::SetpointDecision::reject:
+        disconnect(BLE_HS_EINVAL);
+        return;
+    case bridge::SetpointDecision::verify:
+        verify_setpoint();
+        return;
+    case bridge::SetpointDecision::write:
+        break;
+    }
+    const unsigned deci = unsigned(setpoint_request.target) / 10;
+    const uint8_t bytes[] = {uint8_t(deci), uint8_t(deci >> 8)};
+    phase(Phase::configuring);
+    if (int err =
+            ble_gattc_write_flat(connection, handles[0], bytes, sizeof(bytes), setpoint_written, nullptr)) {
+        disconnect(err);
+        return;
+    }
+    portENTER_CRITICAL(&snapshot_lock);
+    snapshot.submitted = true;
+    portEXIT_CRITICAL(&snapshot_lock);
+}
 void reads_complete() {
     if (operation == Operation::probe) {
         disconnect(successes ? 0 : BLE_HS_ENOENT);
         return;
     }
     const bool poll = operation == Operation::position;
-    if (successes != (poll ? 1U : field_count) || !secure_peer() ||
-        ((poll || writes_position(operation)) &&
+    if (!snapshot.values[position_field] || (!poll && successes < first_limit) || !secure_peer() ||
+        ((poll || writes_position(operation) || operation == Operation::matter_setpoint) &&
          bindings.slots[selected_slot].state != bridge::EnrollmentState::verified)) {
         disconnect(BLE_HS_EAUTHEN);
         return;
@@ -320,6 +398,17 @@ void reads_complete() {
     }
     observe_trv_position(selected_slot, bindings.slots[selected_slot].identity,
                          uint8_t(*snapshot.values[position_field]), position_observed_ms);
+    if (poll || operation == Operation::matter_setpoint) {
+        auto climate = climate_readback();
+        observe_trv_climate(selected_slot, bindings.slots[selected_slot].identity, climate);
+        if (operation == Operation::matter_setpoint) {
+            if (!climate || snapshot.values[2] != 1 || snapshot.values[4] != 0)
+                disconnect(BLE_HS_EINVAL);
+            else
+                apply_setpoint(*climate);
+            return;
+        }
+    }
     if (writes_position(operation)) {
         apply_position_request();
         return;
@@ -373,7 +462,8 @@ int read_value(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *attrib
         snapshot.preflight_position = decoded;
     portEXIT_CRITICAL(&snapshot_lock);
     if (decoded) {
-        ++successes;
+        if (reading < first_limit)
+            ++successes;
         if (reading == position_field)
             position_observed_ms = esp_timer_get_time() / 1000;
     }
@@ -385,7 +475,9 @@ void next_read() {
     if (!active.load() || stopping)
         return;
     while (reading < field_count) {
-        if (operation == Operation::position && reading != position_field) {
+        if ((operation == Operation::position && (reading == 2 || reading == 4)) ||
+            (reading >= first_limit && operation != Operation::position &&
+             operation != Operation::matter_setpoint)) {
             ++reading;
             continue;
         }
@@ -525,6 +617,7 @@ void start_probe(ble_npl_event *) {
         finish(err);
         return;
     }
+    verifying_setpoint = setpoint_observed_after_write = false;
     handles = {};
     sample_handle = 0;
     service_start = service_end = 0;
@@ -543,7 +636,8 @@ void start_probe(ble_npl_event *) {
             finish(BLE_HS_ENOENT);
             return;
         }
-        if (operation == Operation::matter_position && binding.identity != requested_identity) {
+        if ((operation == Operation::matter_position || operation == Operation::matter_setpoint) &&
+            binding.identity != requested_identity) {
             finish(BLE_HS_ENOENT);
             return;
         }
@@ -597,7 +691,7 @@ void start_probe(ble_npl_event *) {
         } else {
             if (binding.state == bridge::EnrollmentState::empty ||
                 ((operation == Operation::valve_only || operation == Operation::position ||
-                  writes_position(operation)) &&
+                  writes_position(operation) || operation == Operation::matter_setpoint) &&
                  binding.state != bridge::EnrollmentState::verified)) {
                 finish(BLE_HS_ENOENT);
                 return;
@@ -645,6 +739,9 @@ void print_snapshot(const Snapshot &value) {
                     unsigned(value.submitted), unsigned(value.acknowledged),
                     value.first_position.value_or(-1), value.later_position.value_or(-1), value.expected,
                     value.target, value.preflight_position.value_or(-1));
+    if (value.operation == Operation::matter_setpoint)
+        std::printf("TRV setpoint expected=%d requested=%d submitted=%u acknowledged=%u\n", value.expected,
+                    value.target, unsigned(value.submitted), unsigned(value.acknowledged));
     for (size_t i = 0; i < field_count; ++i) {
         std::printf("TRV read field=%s status=%d", names[i], value.status[i]);
         if (value.values[i])
@@ -733,7 +830,8 @@ bool selected_address(const char *text, ble_addr_t &selected, bool pairing_requi
            (selected.type == BLE_ADDR_RANDOM && (selected.val[5] & 0xc0) == 0xc0);
 }
 int queue_operation(Operation selected_operation, size_t slot, const ble_addr_t &target,
-                    bridge::TrvPositionWrite request = {}, const bridge::EnrollmentId &identity = {}) {
+                    bridge::TrvPositionWrite request = {}, const bridge::EnrollmentId &identity = {},
+                    bridge::TrvSetpointWrite setpoint = {}) {
     if (ble_diagnostic_scan_active() || !ble_hs_synced())
         return 1;
     bool expected = false;
@@ -743,14 +841,16 @@ int queue_operation(Operation selected_operation, size_t slot, const ble_addr_t 
     operation = selected_operation;
     selected_slot = slot;
     position_request = request;
+    setpoint_request = setpoint;
     requested_identity = identity;
     portENTER_CRITICAL(&snapshot_lock);
     snapshot = {};
     snapshot.status.fill(-1);
     snapshot.phase = Phase::queued;
     snapshot.operation = selected_operation;
-    snapshot.expected = request.expected;
-    snapshot.target = request.target;
+    snapshot.expected =
+        selected_operation == Operation::matter_setpoint ? setpoint.expected : request.expected;
+    snapshot.target = selected_operation == Operation::matter_setpoint ? setpoint.target : request.target;
     snapshot.slot = selected_operation == Operation::probe ? -1 : int(slot);
     portEXIT_CRITICAL(&snapshot_lock);
     ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &start_event);
@@ -810,6 +910,8 @@ esp_err_t forget_slot(size_t slot, const std::optional<std::array<uint8_t, 6>> &
     if (auto err = save_trv_bindings(table); err != ESP_OK)
         return err;
     portENTER_CRITICAL(&snapshot_lock);
+    if (last_setpoint && last_setpoint->slot == int(slot))
+        last_setpoint.reset();
     if (snapshot.slot == int(slot))
         snapshot = {};
     for (auto &entry : position_history)
@@ -898,6 +1000,14 @@ bool queue_matter_position(size_t slot, const bridge::EnrollmentId &id, uint8_t 
                            id) == 0;
 }
 
+bool queue_matter_setpoint(size_t slot, const bridge::EnrollmentId &id, const bridge::TrvClimate &observed,
+                           int target) {
+    return slot < bridge::Enrollment::capacity && observed.accepts(target) &&
+           queue_operation(Operation::matter_setpoint, slot, {}, {}, id,
+                           {observed.target, target, observed.functions,
+                            uint64_t(esp_timer_get_time() / 1000) + 15000}) == 0;
+}
+
 bool trv_gatt_probe_active() { return active.load(); }
 void register_trv_gatt_probe() {
     ESP_ERROR_CHECK(ble_uuid_from_str(&sample_uuid, "d52246df-98ac-4d21-be1b-70d5f66a5ddb") == 0 ? ESP_OK
@@ -914,6 +1024,22 @@ void register_trv_gatt_probe() {
                                          read_position_again, nullptr) == 0
                         ? ESP_OK
                         : ESP_FAIL);
+    esp_console_cmd_t setpoint{};
+    setpoint.command = "trv_setpoint";
+    setpoint.help = "Show the last completed Matter setpoint write and protected readback";
+    setpoint.func = [](int argc, char **) -> int {
+        if (argc != 1)
+            return 1;
+        portENTER_CRITICAL(&snapshot_lock);
+        auto done = last_setpoint;
+        portEXIT_CRITICAL(&snapshot_lock);
+        if (done)
+            print_snapshot(*done);
+        else
+            std::printf("No completed setpoint write since boot\n");
+        return 0;
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&setpoint));
     esp_console_cmd_t position{};
     position.command = "trv_position";
     position.help =

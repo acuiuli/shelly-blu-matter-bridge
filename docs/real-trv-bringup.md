@@ -16,7 +16,7 @@ the bridge over private USB, using the TRV's physical pairing mode. No Shelly ac
 app or vendor gateway is a prerequisite for that intended flow. HA will receive the
 physical valve through the existing Matter bridge. Each BLE valve needs no Matter
 pairing code. The same physical endpoint exposes measured temperature and battery
-as read-only Matter sensors. A writable physical thermostat remains a separate milestone.
+as read-only Matter sensors. Its Thermostat cluster also accepts a heating setpoint.
 
 Initial setup must offer **valve-only control** explicitly. Selecting it disables the
 TRV's automatic temperature regulator over BLE and verifies the setting on the valve.
@@ -327,3 +327,23 @@ again by the caller after fresh feedback. Finite timed opens and finite default
 durations are unsupported in this prototype. Verify concurrent clients, an absent
 valve, restart, and operation with the original gateway absent for this radiator
 before using this control in an automation.
+
+## 9. Test a physical thermostat setpoint
+
+1. On the private console run `diag` and record the enrolled endpoint, current
+   setpoint, regulator, opening and limits. Temperatures in the diagnostics
+   are in hundredths of a degree Celsius. Pick an isolated radiator and a
+   small reversible target change. With the regulator enabled, a new setpoint
+   can move the valve.
+2. After upgrading an existing bridge, re-interview the parent Matter bridge
+   in HA and open the enrolled radiator. Under **Developer Tools → Actions**,
+   choose **Climate: Set target temperature** (`climate.set_temperature`),
+   select its physical climate entity and supply just the new temperature.
+   Leave the optional HVAC mode field blank. In valve-only mode HA reports
+   that the thermostat is off and the percentage valve remains usable.
+3. Run `trv_setpoint` after the operation completes. Check the expected and
+   requested values, write acknowledgment, returned target, regulator flags
+   and opening. The bridge reads the target independently after writing.
+4. Restore the starting temperature using the same HA action. Read the
+   resulting target and flags again, then check them on a fresh bonded
+   connection with `trv_reconnect SLOT` and `trv_reconnect status`.

@@ -5,13 +5,17 @@ namespace bridge {
 std::optional<int> decode_trv_readback(TrvReadField field, const uint8_t *data, size_t size) {
     if (!data || field >= TrvReadField::count)
         return std::nullopt;
-    size_t expected = field == TrvReadField::target || field == TrvReadField::functions ? 2 : 1;
+    const bool temperature = field == TrvReadField::target || field == TrvReadField::min_target ||
+                             field == TrvReadField::max_target;
+    size_t expected = temperature || field == TrvReadField::functions ? 2 : 1;
     if (size != expected)
         return std::nullopt;
     int value = data[0];
     if (size == 2)
         value |= int(data[1]) << 8;
     switch (field) {
+    case TrvReadField::min_target:
+    case TrvReadField::max_target:
     case TrvReadField::target:
         if (value < 40 || value > 300)
             return std::nullopt;

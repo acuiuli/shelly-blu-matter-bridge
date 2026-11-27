@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "matter_trv_position.h"
+#include "physical_thermostat.h"
 #include "trv_binding_store.h"
 #include "trv_gatt_probe.h"
 #include <app/clusters/valve-configuration-and-control-server/CodegenIntegration.h>
@@ -24,6 +25,8 @@ struct Feed {
     std::optional<bridge::EnrollmentId> binding;
     bridge::PositionObservation sample;
     bridge::TrvSensorObservation sensors;
+    std::optional<bridge::TrvClimate> climate;
+    uint64_t climate_ms = 0;
     uint64_t sensor_attempt_ms = 0;
     uint32_t completions = 0;
     int last_result = -1;
@@ -42,6 +45,7 @@ struct Published {
     uint32_t blocked_commands = 0;
     uint32_t reachability_losses = 0;
     bool registered = false;
+    bool thermostat_registered = false;
 };
 std::array<Published, capacity> devices;
 Feed get_feed(size_t slot);
@@ -161,37 +165,52 @@ class PhysicalValve final : public ValveConfigurationAndControlCluster {
 };
 
 std::array<LazyRegisteredServerCluster<PhysicalValve>, capacity> servers;
-void start_valve(uint16_t ep) {
+std::array<LazyRegisteredServerCluster<PhysicalThermostat>, capacity> thermostats;
+template <bool thermostat> auto &server_for(size_t i) {
+    if constexpr (thermostat)
+        return thermostats[i];
+    else
+        return servers[i];
+}
+template <bool thermostat> void start_cluster(uint16_t ep) {
     for (size_t i = 0; i < capacity; ++i) {
-        if (devices[i].ep != ep)
+        auto &d = devices[i];
+        if (d.ep != ep)
             continue;
-        if (devices[i].registered)
+        bool &registered = thermostat ? d.thermostat_registered : d.registered;
+        if (registered)
             return;
-        auto &s = servers[i];
-        if (!s.IsConstructed())
-            s.Create(ep, i);
-        devices[i].registered =
+        auto &s = server_for<thermostat>(i);
+        if (!s.IsConstructed()) {
+            if constexpr (thermostat)
+                s.Create(ep, i, d.identity);
+            else
+                s.Create(ep, i);
+        }
+        registered =
             data_model::provider::get_instance().registry().Register(s.Registration()) == CHIP_NO_ERROR;
-        if (!devices[i].registered)
+        if (!registered)
             s.Destroy();
         return;
     }
 }
-void stop_valve(uint16_t ep, ClusterShutdownType reason) {
+template <bool thermostat> void stop_cluster(uint16_t ep, ClusterShutdownType reason) {
     for (size_t i = 0; i < capacity; ++i) {
-        if (devices[i].ep != ep || !servers[i].IsConstructed())
+        auto &d = devices[i];
+        auto &s = server_for<thermostat>(i);
+        if (d.ep != ep || !s.IsConstructed())
             continue;
-        if (devices[i].registered) {
-            auto err =
-                data_model::provider::get_instance().registry().Unregister(&servers[i].Cluster(), reason);
-            if (err != CHIP_NO_ERROR) {
-                ESP_LOGE("position", "Could not unregister valve endpoint %u", unsigned(ep));
+        bool &registered = thermostat ? d.thermostat_registered : d.registered;
+        if (registered) {
+            if (data_model::provider::get_instance().registry().Unregister(&s.Cluster(), reason) !=
+                CHIP_NO_ERROR) {
+                ESP_LOGE("bridge", "Could not unregister cluster on physical endpoint %u", unsigned(ep));
                 return;
             }
-            devices[i].registered = false;
+            registered = false;
         }
         if (reason == ClusterShutdownType::kPermanentRemove)
-            servers[i].Destroy();
+            s.Destroy();
         return;
     }
 }
@@ -241,6 +260,9 @@ esp_err_t create_endpoint(size_t slot, const bridge::EnrollmentId &id) {
     if (!ep)
         return ESP_FAIL;
     const auto number = endpoint::get_id(ep);
+    endpoint::thermostat::config_t tc;
+    tc.thermostat.control_sequence_of_operation = 2;
+    tc.thermostat.feature_flags = cluster::thermostat::feature::heating::get_id();
     endpoint::water_valve::config_t vc;
     cluster::valve_configuration_and_control::feature::level::config_t level;
     char label[24];
@@ -253,12 +275,16 @@ esp_err_t create_endpoint(size_t slot, const bridge::EnrollmentId &id) {
                  cluster::bridged_device_basic_information::attribute::create_unique_id(basic, uid, 32) &&
                  cluster::bridged_device_basic_information::attribute::create_node_label(
                      basic, label, std::strlen(label)) &&
-                 endpoint::water_valve::add(ep, &vc) == ESP_OK && add_physical_sensors(ep) &&
+                 endpoint::water_valve::add(ep, &vc) == ESP_OK &&
+                 endpoint::thermostat::add(ep, &tc) == ESP_OK && add_physical_sensors(ep) &&
                  cluster::valve_configuration_and_control::feature::level::add(
                      cluster::get(ep, ValveConfigurationAndControl::Id), &level) == ESP_OK &&
                  endpoint::set_parent_endpoint(ep, endpoint::get(1)) == ESP_OK;
-    if (!ready || cluster::set_init_and_shutdown_callbacks(cluster::get(ep, Valve::Id), start_valve,
-                                                           stop_valve) != ESP_OK) {
+    if (!ready ||
+        cluster::set_init_and_shutdown_callbacks(cluster::get(ep, Valve::Id), start_cluster<false>,
+                                                 stop_cluster<false>) != ESP_OK ||
+        cluster::set_init_and_shutdown_callbacks(cluster::get(ep, Thermostat::Id), start_cluster<true>,
+                                                 stop_cluster<true>) != ESP_OK) {
         endpoint::destroy(node, ep);
         return ESP_FAIL;
     }
@@ -278,7 +304,7 @@ esp_err_t create_endpoint(size_t slot, const bridge::EnrollmentId &id) {
     devices[slot].identity = id;
     devices[slot].ep = number;
     err = endpoint::enable(ep);
-    if (err != ESP_OK || !devices[slot].registered) {
+    if (err != ESP_OK || !devices[slot].registered || !devices[slot].thermostat_registered) {
         endpoint::destroy(node, ep);
         devices[slot] = {};
         return ESP_FAIL;
@@ -308,6 +334,17 @@ void observe_trv_position(size_t slot, const bridge::EnrollmentId &id, uint8_t p
     portENTER_CRITICAL(&feed_lock);
     feeds[slot].binding = id;
     feeds[slot].sample = {id, now_ms, percent};
+    portEXIT_CRITICAL(&feed_lock);
+}
+void observe_trv_climate(size_t slot, const bridge::EnrollmentId &id,
+                         std::optional<bridge::TrvClimate> state) {
+    const uint64_t now = esp_timer_get_time() / 1000;
+    portENTER_CRITICAL(&feed_lock);
+    auto &f = feeds[slot];
+    if (f.binding == id) {
+        f.climate = state;
+        f.climate_ms = now;
+    }
     portEXIT_CRITICAL(&feed_lock);
 }
 void record_trv_sensor_read(size_t slot, const bridge::EnrollmentId &id,
@@ -378,8 +415,13 @@ esp_err_t remove_trv_endpoint(size_t slot, const bridge::EnrollmentId &id) {
             if (auto rc = endpoint::destroy(node::get(), ep); rc != ESP_OK)
                 return rc;
         }
+        if (thermostats[slot].IsConstructed()) {
+            stop_cluster<true>(d.ep, ClusterShutdownType::kPermanentRemove);
+            if (thermostats[slot].IsConstructed())
+                return ESP_ERR_INVALID_STATE;
+        }
         if (servers[slot].IsConstructed()) {
-            stop_valve(d.ep, ClusterShutdownType::kPermanentRemove);
+            stop_cluster<false>(d.ep, ClusterShutdownType::kPermanentRemove);
             if (servers[slot].IsConstructed())
                 return ESP_ERR_INVALID_STATE;
         }
@@ -426,7 +468,7 @@ void publish_trv_positions() {
                 continue;
             }
         }
-        if (!d.registered)
+        if (!d.registered || !d.thermostat_registered)
             continue;
         auto &server = servers[i].Cluster();
         server.reconcile(feed);
@@ -434,6 +476,8 @@ void publish_trv_positions() {
         const auto level = bound ? feed.sample.current(d.identity, now, stale_ms) : std::nullopt;
         server.publish_level(level);
         publish_sensors(d, level && feed.sensors.fresh(now, stale_ms) ? &*feed.sensors.sample : nullptr);
+        const auto climate = level && now - feed.climate_ms < stale_ms ? feed.climate : std::nullopt;
+        thermostats[i].Cluster().publish(climate, d.temperature);
         if (level)
             d.last_publish = feed.sample.observed_ms;
         if (level.has_value() != d.reachable) {
@@ -447,7 +491,7 @@ void publish_trv_positions() {
         }
         if (bound && now >= d.next_poll &&
             (!level || now - feed.sample.observed_ms >= poll_ms || !feed.sensor_attempt_ms ||
-             now - feed.sensor_attempt_ms >= poll_ms)) {
+             now - feed.sensor_attempt_ms >= poll_ms || now - feed.climate_ms >= poll_ms)) {
             d.next_poll = now + (queue_position_read(i) ? 60000 : 5000);
         }
     }
@@ -465,6 +509,11 @@ void show_trv_positions(uint64_t now) {
                         static_cast<unsigned long>(d.blocked_commands),
                         static_cast<unsigned long>(feed.completions), feed.last_result,
                         static_cast<unsigned long>(d.reachability_losses));
+            if (d.reachable && feed.climate && now >= feed.climate_ms && now - feed.climate_ms < stale_ms)
+                std::printf(
+                    "Physical thermostat slot=%u endpoint=%u target_centi_c=%d regulator=%u min=%d max=%d\n",
+                    unsigned(i), unsigned(d.ep), feed.climate->target, unsigned(feed.climate->functions & 1),
+                    feed.climate->minimum, feed.climate->maximum);
             std::printf("Physical sensors slot=%u endpoint=%u", unsigned(i), unsigned(d.ep));
             if (d.temperature)
                 std::printf(" measured_centi_c=%d", int(*d.temperature));

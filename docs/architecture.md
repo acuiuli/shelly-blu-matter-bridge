@@ -102,8 +102,7 @@ ID leaves the sensor timestamp unchanged. Failed reads retain the last confirmed
 sample until it expires. Attributes are null before the first sample and after
 expiry. Sensor polling continues even when frequent valve commands keep the
 position fresh. Read-only Temperature Measurement and Power Source attributes
-share the existing physical endpoint. Physical thermostat control has separate
-acceptance criteria. [Shelly TRV objects](https://shelly-api-docs.shelly.cloud/docs-ble/Devices/BLU_ZB/trv/#bthome-data) · [Shelly GATT service](https://shelly-api-docs.shelly.cloud/docs-ble/common/#common-gatt-services-and-characteristics)
+share the existing physical endpoint. [Shelly TRV objects](https://shelly-api-docs.shelly.cloud/docs-ble/Devices/BLU_ZB/trv/#bthome-data) · [Shelly GATT service](https://shelly-api-docs.shelly.cloud/docs-ble/common/#common-gatt-services-and-characteristics)
 
 Each physical endpoint registers a Valve Configuration and Control server for its
 enrollment. Open and Close reserve a single bonded BLE operation and publish the
@@ -125,3 +124,29 @@ NimBLE's automatic address selection prefers that random address, so it is unsui
 as the long-lived identity presented to a paired TRV. Address selection for outbound
 valve connections is local to each connection. A missing public identity stops the
 operation before the bridge attempts pairing.
+
+### Physical thermostat
+
+The enrolled endpoint also serves the Thermostat device type. The bridge reads
+the target temperature and regulator flags with each position poll. LocalTemperature
+uses the same measured sample as the temperature sensor. The reported heating
+setpoint comes from the bonded target characteristic. SystemMode reports Heat
+when the radiator regulates temperature and Off when its regulator is disabled.
+This describes the temperature regulator. The separate valve still reports its
+physical opening in either mode.
+
+A setpoint write enters the shared BLE queue once, expires after 15 seconds
+before submission and belongs to one enrollment identity. The bridge checks
+the live starting target, the full function mask, calibration, errors and
+the supported range. A changed starting target rejects the write unless the
+radiator already reached the requested value. If the TRV advertises configured
+limit characteristics, both must return valid limits. On firmware with neither
+characteristic, the bridge uses the vendor's absolute 4.0–30.0°C range and
+checks the result on the radiator. Unsupported precision is rejected.
+
+Only the target characteristic is written. A second read of the target and
+function mask establishes success. Between acceptance and readback the Matter
+thermostat serves the last confirmed target. A failed read after submission
+invalidates uncertain climate state until the next successful poll. The
+prototype rejects HVAC mode and limit writes. Relative heating setpoint
+commands share the same preflight, limits and readback.

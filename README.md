@@ -41,6 +41,7 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 | Capability | Planned interface | Implemented | Validated |
 | --- | --- | --- | --- |
 | Temperature, setpoint, Off/Heat | Thermostat | Simulator + Matter model | Host core tests; four HA climates discovered; HA writes pending |
+| Physical heating setpoint | Thermostat.OccupiedHeatingSetpoint | Heating target with a bonded write and independent readback | [One radiator reported its 20.0°C target after the S3 update](docs/validation/2026-11-27-physical-thermostat.md) |
 | Physical measured temperature | Temperature Measurement | Read-only sensor on the enrolled valve endpoint | [The bridge published 20.5°C with a separate 20.0°C setpoint. HA discovered the temperature sensor after a bridge re-interview](docs/validation/2026-11-27-physical-sensors.md) |
 | Valve percentage and feedback | Valve Configuration and Control, Level feature | Simulator + native Matter delegate + child valve endpoint | Fault tests; four HA valves discovered; HA command and confirmed 60% feedback; conformance pending |
 | Physical valve position | Valve Configuration and Control, CurrentLevel and CurrentState | Standard Open/Close on a separately identified Matter endpoint, with bonded GATT preflight and readback | [HA set 20% and closed one isolated radiator. Immediate and delayed reads confirmed each position](docs/validation/2026-11-27-direct-enrollment.md#home-assistant-movement-after-direct-enrollment) |
