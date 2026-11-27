@@ -24,6 +24,10 @@ The valve reported 20% immediately and 0% on the delayed USB read. In a later
 test HA sent both commands through Matter and displayed 20%/open and 0%/closed.
 The bridge found zero during the Close preflight and submitted no closing write.
 
+The [isolated radiator test](2026-11-27-direct-enrollment.md) records a Matter
+Close issued from a confirmed 16%, its immediate zero and its delayed reversal,
+followed by removal of the selected Shelly gateway association.
+
 ## Original foundation validation
 
 Recorded **2026-11-10** from the foundation working tree (no release tag). These are

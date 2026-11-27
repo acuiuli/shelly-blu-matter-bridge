@@ -186,6 +186,24 @@ fresh readback. Verify operation with no vendor gateway assisting the test valve
 do not disconnect a gateway still needed for the other installed valves. The current
 enrollment commands do not satisfy these Matter/control acceptance steps.
 
+### Isolate an installed valve while the other radiators stay on Shelly
+
+Save the selected valve's gateway component ID, peer identity, local and remote
+configuration, schedules and latest status privately. Find the component in
+`Shelly.GetComponents` and verify its address with `BluTrv.GetConfig`. The
+gateway's aggregate `Shelly.GetStatus` can omit dynamic TRV components.
+
+During the agreed test window, remove only the matched component with
+`BluTrv.Delete`. Read the component directory again and compare the remaining
+TRV configurations with the snapshot. An old HA entity may remain visible after
+its backing component is removed. Keep the commissioned Matter bridge in HA.
+
+For a valve already verified in a bridge slot, a short button press opens BLE
+pairing. Discover it again and use `trv_repair SLOT SESSION:INDEX` to establish
+new link keys for the same valve while retaining its endpoint. An unregistered
+valve uses `trv_enroll` in an empty slot. Record which path was exercised.
+[Installed-valve isolation result](validation/2026-11-27-direct-enrollment.md)
+
 ## 6. Compare an externally commanded movement with the Matter report
 
 Use an enrolled valve in valve-only mode with a known starting position. Coordinate
