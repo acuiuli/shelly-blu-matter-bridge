@@ -41,5 +41,18 @@ After removing the association, a new encrypted reconnect from the bridge using
 its existing bond completed in 1,816 ms. The TRV reported 16%, a 4°C target,
 successful calibration, a functions mask of 160 and zero errors. Endpoint 10
 remained reachable. This step verifies independent BLE access with the original
-gateway absent for this radiator. Establishing new link keys requires the
-valve's physical BLE pairing window.
+gateway absent for this radiator.
+
+## Renewing the bond after gateway removal
+
+The operator briefly pressed the TRV's pairing button. The S3 detected the
+selected valve advertising pairing mode and issued one same-slot repair.
+The valve returned the peer security error `0x0505` (pairing not supported)
+after 386 ms. No encrypted connection or GATT read completed. The error gives
+no reason for the refusal. [NimBLE return codes](https://github.com/apache/mynewt-nimble/blob/master/docs/ble_hs/ble_hs_return_codes.rst)
+
+Repair had already dropped the S3's previous key for this peer. Slot 0 retained
+its pending identity, endpoint 10 reported unreachable and the other three
+slots stayed empty. A subsequent stored-key reconnect returned 23
+(`BLE_HS_EAUTHEN`) in 36 ms. The Shelly gateway still listed only the two
+other radiators, with both configurations matching the saved baseline.

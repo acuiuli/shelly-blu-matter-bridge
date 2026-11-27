@@ -139,6 +139,15 @@ pending reservation, drops only that peer's local BLE keys and re-enrolls it usi
 the same enrollment identity. `trv_repair status` shows completion and read results.
 A mismatched peer is rejected. An interrupted repair can be retried on the same slot.
 
+On a failed repair, check the slot and `trv_reconnect SLOT` first. Repair removes
+the old local key before the new pairing completes, so the Matter valve can
+become unreachable. If the slot is pending and reconnect reports
+`BLE_HS_EAUTHEN`, start a short discovery scan as the operator opens a fresh
+pairing window. Use `trv_enroll SLOT SESSION:INDEX` for the same peer and pending
+slot. Verify all five reads over the bonded link and a second encrypted connection before
+using the valve in HA. The TRV displays `bLE` during its 30-second window.
+[TRV button and display](https://kb.shelly.cloud/knowledge-base/shelly-blu-trv)
+
 Verify encrypted reconnect after S3 restart and TRV battery replacement before
 depending on the bridge. Keep all console captures and identifiers private. Production
 at-rest protection remains part of the [security work](../SECURITY.md).
@@ -198,10 +207,12 @@ During the agreed test window, remove only the matched component with
 TRV configurations with the snapshot. An old HA entity may remain visible after
 its backing component is removed. Keep the commissioned Matter bridge in HA.
 
-For a valve already verified in a bridge slot, a short button press opens BLE
-pairing. Discover it again and use `trv_repair SLOT SESSION:INDEX` to establish
-new link keys for the same valve while retaining its endpoint. An unregistered
-valve uses `trv_enroll` in an empty slot. Record which path was exercised.
+For a valve already verified in a bridge slot, run `trv_reconnect SLOT` after
+removing the gateway association. If the encrypted reads succeed, ordinary
+migration is complete for the BLE link. To test fresh keys deliberately, open
+the physical pairing window and follow the same-slot repair procedure above.
+Plan for the control outage if the valve declines. A valve new to the bridge
+uses `trv_enroll` in an empty slot. Record which path was exercised.
 [Installed-valve isolation result](validation/2026-11-27-direct-enrollment.md)
 
 ## 6. Compare an externally commanded movement with the Matter report

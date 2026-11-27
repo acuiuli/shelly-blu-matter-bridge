@@ -26,7 +26,9 @@ The bridge found zero during the Close preflight and submitted no closing write.
 
 The [isolated radiator test](2026-11-27-direct-enrollment.md) records a Matter
 Close issued from a confirmed 16%, its immediate zero and its delayed reversal,
-followed by removal of the selected Shelly gateway association.
+followed by removal of the selected Shelly gateway association. The bridge then
+read all five fields over its existing bond. The valve declined the first
+fresh pairing request and the original endpoint reported unavailable.
 
 ## Original foundation validation
 
