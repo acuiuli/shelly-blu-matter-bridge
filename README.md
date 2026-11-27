@@ -5,8 +5,9 @@ Thread upstream, BLE downstream**, on the Espressif ESP32-S3 + ESP32-H2 Main Boa
 The prototype includes four simulated TRVs and experimental percentage control for enrolled physical valves. **Full gateway replacement
 remains unvalidated.**
 
-**Publication gate:** keep this repository private until a working MVP has been
-validated. Validation of physical valve control and clean onboarding is still pending.
+Home Assistant has controlled one enrolled radiator through the bridge. Clean
+onboarding without the original gateway and sustained control still need testing.
+[Hardware validation results](docs/validation/2026-11-26-matter-position.md)
 
 > This project is independent and unaffiliated with Shelly. It is not presented as
 > certified by Shelly, the Connectivity Standards Alliance, or any other body.

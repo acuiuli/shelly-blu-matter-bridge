@@ -26,15 +26,20 @@ The installation upgraded Better Thermostat to official 2.0.0. Its [client requi
 
 ## What the GitHub workflows do
 
-- **Build firmware and run validation tests** runs on pushes and pull requests. It
-  checks repository policies, release-tool tests, DCO author sign-offs on PRs, C++
-  formatting, host simulator behavior, S3/H2 compilation, resolved radio/OTA
-  configuration and dependency provenance. The artifact is a dependency review,
-  containing notices and hashes; it contains no firmware release images.
+- **Check repository, formatting and host tests** runs on pushes to `main`, on pull
+  requests and on manual dispatch. One Linux job checks documentation, release-tool
+  tests, PR sign-offs, C++ formatting and host tests. It installs the three pinned
+  host tools directly on the runner and has a five-minute timeout.
+- **Manually build ESP32-S3 and H2 firmware and audit dependencies** runs only on
+  manual dispatch. Use it when a hardware milestone, toolchain change or release
+  needs a clean cross-build. In **Actions**, select the workflow, choose **Run
+  workflow** and select the intended ref. The CLI equivalent for `main` is
+  `gh workflow run firmware.yml --ref main`. It checks SDK revisions, compiles
+  both chips, checks the radio/OTA configuration and dependency lock, then uploads
+  the dependency review.
 - **Check documentation URLs for broken links** runs weekly and on manual request.
-  It reads public HTTP URLs in Markdown documentation and fails on 404/410 results.
-  Access-denied, rate-limited and temporarily unreachable URLs are reported separately.
-  Local documentation references are checked by the first workflow on every push/PR.
+  It checks public Markdown links for HTTP 404/410 responses. The repository check
+  validates local links on pushes to `main` and on pull requests.
 
 ## Reproducible container recipe
 

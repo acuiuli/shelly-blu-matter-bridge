@@ -81,4 +81,4 @@ valve's current setup until the next test stage is ready; see the
 Application SHA-256:
 `ddbb4e115feff3942c48f2fbadd18e140b79d80e2df52aa8dcb3f548e542dccc`.
 Dependency evidence is in [the inventory](../dependencies.json) and local
-`build/dependency-review-enrollment-final-20261125/`. The repository remains private.
+`build/dependency-review-enrollment-final-20261125/`. The repository was private at this milestone.

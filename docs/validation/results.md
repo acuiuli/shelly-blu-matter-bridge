@@ -77,13 +77,8 @@ SDK warnings about duplicate Kconfig definitions
 and unused/uninitialized values in unused vendor clusters were observed; they did not
 fail the builds. They are upstream warnings, not hardware qualification results.
 
-The foundation is pushed to GitHub and the repository is **private**. Public launch
-requires a working MVP; this software-only foundation does not meet that gate. Workflow
-defaults are read-only and workflows cannot approve pull requests. Hosted verification
-is tracked by the [CI workflow](https://github.com/acuiuli/shelly-blu-matter-bridge/actions/workflows/ci.yml).
-Consult the run for the revision being used; the local measurements above are separate.
-
-Branch protection is unavailable on the current private-repository tier (GitHub returned
-403), and private vulnerability reporting is unavailable for this private repository
-(404). Configure and verify those controls at the eventual public launch. No paid plan
-change is required or authorized by this foundation.
+At the foundation milestone the repository was private. Local checks and hosted
+workflow results were recorded separately. GitHub's private-repository tier
+returned 403 for branch protection and 404 for private vulnerability reporting.
+See [maintainer responsibilities](../../MAINTAINERS.md) for the public project and
+[development workflows](../development-versions.md) for current CI triggers.

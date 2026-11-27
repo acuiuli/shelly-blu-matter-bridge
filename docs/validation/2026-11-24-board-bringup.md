@@ -1,7 +1,7 @@
 # 2026-11-24: SDK upgrade and board bring-up
 
 This report separates software checks from observed hardware behavior. The repository
-remains private until a working MVP is validated.
+was private during this session.
 
 Current outcome: HA commissioning succeeds after selecting the Thread platform
 DNS-SD backend and enabling the controller's test-certificate trust. The user

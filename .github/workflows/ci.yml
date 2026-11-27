@@ -1,70 +1,44 @@
-name: Build firmware and run validation tests
+name: Check repository, formatting and host tests
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: ci-${{ github.ref }}
+  group: checks-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  repository:
-    name: Repository policies and release-tool tests
+  checks:
+    name: Repository checks and host tests
     runs-on: ubuntu-26.04
+    timeout-minutes: 5
     steps:
-      - name: Check out repository source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Validate repository policies and documentation references
-        run: python3 tools/check_repository.py
-      - name: Test release-bundle validation and checksum protection
-        run: python3 -m unittest discover -s tests -p 'test_*.py'
-  dco:
-    name: DCO author sign-offs
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Check out repository source
+      - name: Check out source and commit history for PR sign-offs
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Verify each PR commit has the author’s DCO sign-off
+        if: github.event_name == 'pull_request'
         run: python3 tools/check_dco.py
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-  prototype:
-    name: ESP32-S3 and H2 builds, simulator tests, and dependency audit
-    runs-on: ubuntu-26.04
-    timeout-minutes: 60
-    steps:
-      - name: Check out repository source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Free runner disk space for the pinned development container
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
-      - name: Verify pinned development-container SDK revisions
-        run: ./tools/dev.sh python3 tools/check_toolchain.py
+      - name: Validate repository policies and local documentation links
+        run: python3 tools/check_repository.py
+      - name: Test release packaging and checksum protection
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Install the locked versions of clang-format, CMake and Ninja
+        run: |
+          python3 -m venv "$RUNNER_TEMP/bridge-host"
+          "$RUNNER_TEMP/bridge-host/bin/python" -m pip install --only-binary=:all: -c .devcontainer/python-tools.lock clang-format cmake ninja
+          echo "$RUNNER_TEMP/bridge-host/bin" >> "$GITHUB_PATH"
       - name: Check C++ source formatting
-        run: ./tools/dev.sh bash tools/format.sh --check
-      - name: Test reconciliation, BLE decoding, enrollment storage, and valve-only flag preservation
-        run: ./tools/dev.sh bash -c 'cmake -S . -B build/host -G Ninja && cmake --build build/host && ctest --test-dir build/host --output-on-failure'
-      - name: ESP32-S3 firmware compilation
-        run: ./tools/dev.sh idf.py -C firmware set-target esp32s3 build
-      - name: Verify resolved Thread, BLE, Wi-Fi, and OTA configuration
-        run: ./tools/dev.sh python3 tools/check_firmware_config.py
-      - name: Matched H2 RCP compilation
-        run: ./tools/dev.sh bash tools/build_rcp.sh
-      - name: Dependency lock is reproducible
-        run: git diff --exit-code -- firmware/dependencies.lock
-      - name: Dependency and notice inventory (local artifact only)
-        run: ./tools/dev.sh python3 tools/dependency_inventory.py build/dependency-review
-      - name: Retain dependency review evidence (contains no firmware images)
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: dependency-review
-          path: build/dependency-review
-          retention-days: 7
+        run: bash tools/format.sh --check
+      - name: Build and test reconciliation, BLE decoding and enrollment on the host
+        run: |
+          cmake -S . -B build/host -G Ninja
+          cmake --build build/host
+          ctest --test-dir build/host --output-on-failure

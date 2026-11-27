@@ -10,8 +10,8 @@ with keys and household identifiers removed. If private reporting is unavailable
 [GitHub support](https://support.github.com/) to resolve access; do not disclose the
 vulnerability publicly as a workaround. No contact email is published.
 
-Maintainers must enable private vulnerability reporting before public launch, aim to
-acknowledge reports within seven days, coordinate a fix and advisory with the reporter,
+Maintainers keep private vulnerability reporting enabled, aim to acknowledge reports
+within seven days, coordinate a fix and advisory with the reporter,
 and avoid promising a fix date until triage. These are maintainer targets, not a
 service guarantee. Publish affected/fixed versions and recovery instructions with an
 advisory after coordinated disclosure.

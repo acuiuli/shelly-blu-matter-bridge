@@ -1,16 +1,14 @@
 # Maintainers and governance
 
 Repository owner and initial code owner: [@acuiuli](https://github.com/acuiuli).
-Keep the repository **private until a working MVP has been validated**. A successful
-cross-build or simulator test is insufficient to change its visibility.
 Contributors retain copyright in their work. The maintainer reviews design boundaries,
 DCO checks, tests, dependency changes, reports, releases and security coordination.
 Changes should be reviewable as a pull request; require CI and code-owner review in
 branch protection before accepting external contributions.
 
-Before public launch, the owner must enable private vulnerability reporting, confirm
-the conduct reporting links, configure protected branches/required checks, and inspect
-`git log --all --name-only` plus the publication file list. The original Italian draft
+The owner maintains private vulnerability reporting, the conduct reporting links,
+and the required checks on the default branch. Review source history and release
+contents for installation data before publishing artifacts. The original Italian draft
 is kept locally under ignored `.private/`; it must never be staged, archived or pushed.
 The initial tracked history contained only LICENSE. Do not use `git add -f` to override
 private-file exclusions. Public visibility and GitHub repository settings are separate

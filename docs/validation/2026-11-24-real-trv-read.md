@@ -1,8 +1,8 @@
 # 2026-11-24: first installed TRV discovery and direct read
 
 This is a read-only transport result, not a real-actuator control release. The
-Matter endpoints still represent four simulated devices. The repository remains
-private until a working MVP is agreed.
+Matter endpoints still represent four simulated devices. The repository was private
+during this test.
 
 ## Reference and selection
 
