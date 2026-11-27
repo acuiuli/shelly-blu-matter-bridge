@@ -37,6 +37,11 @@ image. After the S3 update, the same HA cycle passed again, the valve stayed
 available and the endpoint recorded zero reachability losses.
 The same report records [verified removal from the bridge](2026-11-27-direct-enrollment.md#preparing-an-empty-slot-for-first-enrollment).
 The empty slot and absence of the retired endpoint survived an S3 reboot.
+After the operator factory-reset the radiator, the bridge enrolled it into the
+empty slot, assigned endpoint 11 and switched automatic regulation from on to
+off. A new encrypted connection confirmed the change and the 11% opening.
+After an S3 restart, the operator confirmed the new HA Matter valve showed 11%.
+[Factory-reset enrollment measurements](2026-11-27-direct-enrollment.md#first-enrollment-after-a-physical-factory-reset)
 
 ## Original foundation validation
 

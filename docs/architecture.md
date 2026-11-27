@@ -102,8 +102,9 @@ calibration and clear errors. Each motor write also requires the expected starti
 position. When the bonded read already matches an absolute Matter target, the
 bridge verifies it twice without actuating, even if the last published level differed. A command has a 15-second submission
 deadline and is never replayed. Finite-duration commands remain a conformance gap.
-Clean-start onboarding and closure under the installation's heating controls require
-separate validation.
+The bridge has directly enrolled one physically reset TRV into an empty slot
+and verified the regulator change. Closure under the installation's heating
+controls requires separate validation. [Enrollment results](validation/2026-11-27-direct-enrollment.md#first-enrollment-after-a-physical-factory-reset)
 
 Bonded outbound GATT connections use the S3 controller's public Bluetooth identity.
 The pinned Matter SDK configures a new random static commissioning address at boot.

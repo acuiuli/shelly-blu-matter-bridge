@@ -3,8 +3,10 @@
 Start with one identified valve while retaining its vendor firmware and a recovery
 path. The firmware provides discovery, a read-only GATT probe, experimental persistent
 BLE enrollment and an explicit valve-only configuration command. The first installed
-valve completed pairing and protected reads. The regulator write and clean-start
-onboarding still need hardware validation. Verified BLE valves now get a dedicated
+valve completed direct enrollment after a physical reset. With all slots empty,
+the bridge created a fresh bond and disabled the valve's automatic regulator.
+[Factory-reset enrollment measurements](validation/2026-11-27-direct-enrollment.md#first-enrollment-after-a-physical-factory-reset).
+Verified BLE valves get a dedicated
 Matter endpoint reporting physical position. The four simulated TRVs retain their identities.
 
 ## Intended onboarding without the Shelly app
@@ -209,8 +211,7 @@ scenario; a never-registered factory-new valve remains a separate acceptance cas
 For the complete test, bind real telemetry and control, verify HA sees the actual
 valve through the already-commissioned bridge, and confirm bounded movement by
 fresh readback. Verify operation with no vendor gateway assisting the test valve;
-do not disconnect a gateway still needed for the other installed valves. The current
-enrollment commands do not satisfy these Matter/control acceptance steps.
+do not disconnect a gateway still needed for the other installed valves.
 
 ### Isolate an installed valve while the other radiators stay on Shelly
 

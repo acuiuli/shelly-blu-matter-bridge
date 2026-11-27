@@ -148,3 +148,34 @@ Its SHA-256 was `72060fb28386100849b27ce76476f1692346e7b8ef3de13e85daa70558f2baa
 
 This removal is local to the bridge and can precede or follow the radiator's
 physical reset. The next enrollment starts with a freshly generated identity.
+
+## First enrollment after a physical factory reset
+
+The operator reset the installed TRV once, observed `PG0` on its display and
+opened its BLE pairing window. The S3 confirmed all four physical slots were
+empty and that no physical endpoint was present. USB discovery found the
+valve advertising pairing mode. The test used its previously recorded Bluetooth
+address to select the intended radiator. Enrollment used only the S3 and TRV.
+
+| Operation | Duration | TRV function mask | Automatic regulation | Target temperature | Valve opening |
+| --- | ---: | ---: | --- | ---: | ---: |
+| Enroll in empty slot 0 | 2,627 ms | 161 | On | 20°C | 11% |
+| Configure valve-only and read back the complete mask | 4,637 ms | 160 | Off | 20°C | 11% |
+| Reconnect with the new bond and read again | 2,069 ms | 160 | Off | 20°C | 11% |
+| Reconnect after an S3 hardware restart | 7,940 ms | 160 | Off | 20°C | 11% |
+
+Each operation completed five reads on a bonded, encrypted connection. Only bit
+0 of the function mask changed. Calibration was complete and the valve reported
+zero errors throughout. No position or temperature command was issued. A fresh
+Matter endpoint, 11, reported reachable at 11% on the existing bridge fabrics.
+Endpoint 10 belonged to the forgotten enrollment. A separate check afterwards
+confirmed the Shelly gateway still held only the other two radiator configurations.
+
+After the restart the S3 rejoined Thread and recovered endpoint 11. The operator
+found the new **Shelly BLU TRV 1** valve under the existing HA Matter integration
+and confirmed its current position was 11%. The test required no Shelly app
+registration or additional Matter commissioning.
+
+This run covers enrollment and regulator setup on a previously installed,
+factory-reset TRV. A never-registered retail valve and settings retention
+through a TRV battery change remain separate hardware cases.
