@@ -119,8 +119,7 @@ protect an already-full peer list on the TRV; verify its capacity separately.
 
 Pending reservations survive failure/reboot. A pending slot with stored keys can be
 recovered with `trv_reconnect`; otherwise retry `trv_enroll` for the same peer after
-reopening its pairing mode. Another peer cannot replace it. Removal/replacement
-lifecycle commands are not implemented. Corrupt/unknown storage schemas fail visibly;
+reopening its pairing mode. Another peer cannot replace it. Corrupt/unknown storage schemas fail visibly;
 no keys, fabrics or identity partitions are automatically erased.
 
 The first implementation accepts public/static addresses and unencrypted devices
@@ -154,6 +153,21 @@ Verify encrypted reconnect after S3 restart and TRV battery replacement before
 depending on the bridge. Keep all console captures and identifiers private. Production
 at-rest protection remains part of the [security work](../SECURITY.md).
 
+### Forget a valve on the bridge
+
+Use `diag` to identify the physical slot and endpoint. Over private USB, run
+`trv_forget SLOT`. If the valve's Bluetooth address is known, pass it as an
+additional argument to require an exact match. The command works with the
+valve offline. It removes the selected local BLE bond, the bridged Matter
+endpoint and its persistent enrollment. The valve's own settings and peer list
+are stored on the radiator. The bridge stays commissioned in Home Assistant.
+
+Check for `result=ESP_OK`, `state=empty` in `trv_enroll status`, and the
+endpoint's absence from `diag`. A busy reply means a BLE operation is in
+progress. If cleanup is interrupted, the slot shows `removing`; repeat the
+same forget command. New enrollment in that slot receives a new Matter
+identity. Check the resulting HA entity before restoring its automations.
+
 ## 4. Configure valve-only control explicitly
 
 After enrollment and encrypted bonded access have been validated:
@@ -183,9 +197,10 @@ The TRV's RPC `Shelly.FactoryReset` is documented to preserve pairing informatio
 do not substitute that for a verified physical clean start.
 
 Keep the current installed-valve baseline and cover its heating/boiler automations
-before resetting. Prepare and verify bridge enrollment first. Then remove only the
-selected old integration/device, leave this Matter bridge commissioned, and perform
-the model's documented physical reset. Record what was actually cleared, default
+before resetting. For an empty-slot test, also forget the selected valve on the
+bridge and verify the slot is empty. Leave the Matter bridge commissioned.
+Perform the model's physical factory reset once. A valve already reset with no
+paired peers is ready for the same test. Record what was actually cleared, default
 control mode, calibration and settings. Re-enroll directly without registering in
 Shelly, explicitly select valve-only control, and prove encrypted reconnect/configuration
 retention after power cycles. A reset, previously registered valve validates that

@@ -8,7 +8,7 @@
 namespace bridge {
 // Private identity bindings, separate from both Matter fabrics and BLE keys.
 // Pending reservations survive failed pairing; slots are never silently reused.
-enum class EnrollmentState : uint8_t { empty, pending, verified };
+enum class EnrollmentState : uint8_t { empty, pending, verified, removing };
 struct TrvBinding {
     EnrollmentState state = EnrollmentState::empty;
     uint8_t address_type = 0;
@@ -22,6 +22,8 @@ struct Enrollment {
     bool valid() const;
     bool reserve(size_t slot, const TrvBinding &binding);
     bool begin_repair(size_t slot, uint8_t type, const std::array<uint8_t, 6> &selected);
+    bool begin_removal(size_t slot, const std::optional<std::array<uint8_t, 6>> &expected_peer);
+    bool finish_removal(size_t slot);
     std::array<uint8_t, encoded_size> encode() const;
     static std::optional<Enrollment> decode(const uint8_t *data, size_t size);
 };

@@ -78,7 +78,10 @@ physical peer/slot bindings and independent random enrollment identities, reject
 duplicates and never replaces a nonempty slot with a different peer. Its schema and
 lengths are explicitly serialized; BLE keys remain in the SDK's NVS store. A pending
 reservation survives interrupted pairing. Promotion requires encrypted bonded access
-and validated reads. Removal/replacement lifecycle support remains pending.
+and validated reads. A USB forget operation persists a removing state before
+deleting one peer's local bond and Matter endpoint. A removing slot rejects
+control and enrollment until cleanup completes. Re-enrolling in an empty slot
+creates a fresh enrollment identity and Matter endpoint.
 
 A verified physical valve gets a separate Bridged Node and Water Valve on one endpoint
 under Aggregator 1. The SDK assigns its number after startup. The bridge stores that

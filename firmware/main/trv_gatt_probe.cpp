@@ -503,6 +503,10 @@ void start_probe(ble_npl_event *) {
             return;
         }
         auto &binding = bindings.slots[selected_slot];
+        if (binding.state == bridge::EnrollmentState::removing) {
+            finish(BLE_HS_ENOENT);
+            return;
+        }
         if (operation == Operation::matter_position && binding.identity != requested_identity) {
             finish(BLE_HS_ENOENT);
             return;
@@ -634,6 +638,27 @@ void print_position_history() {
         if (entry)
             print_snapshot(*entry);
 }
+bool parse_peer_address(const char *text, std::array<uint8_t, 6> &address) {
+    if (std::strlen(text) != 17)
+        return false;
+    for (size_t i = 0; i < 6; ++i) {
+        if (i < 5 && text[i * 3 + 2] != ':')
+            return false;
+        unsigned octet = 0;
+        for (size_t digit = 0; digit < 2; ++digit) {
+            char c = text[i * 3 + digit];
+            int nibble = c >= '0' && c <= '9'   ? c - '0'
+                         : c >= 'a' && c <= 'f' ? c - 'a' + 10
+                         : c >= 'A' && c <= 'F' ? c - 'A' + 10
+                                                : -1;
+            if (nibble < 0)
+                return false;
+            octet = (octet << 4) | unsigned(nibble);
+        }
+        address[5 - i] = uint8_t(octet);
+    }
+    return true;
+}
 bool selected_address(const char *text, ble_addr_t &selected, bool pairing_required) {
     // Enrollment can use the anonymous discovery token. No vendor gateway/app,
     // known MAC, or address dump is needed for a factory-new valve.
@@ -656,26 +681,10 @@ bool selected_address(const char *text, ble_addr_t &selected, bool pairing_requi
         return selected.type == BLE_ADDR_PUBLIC ||
                (selected.type == BLE_ADDR_RANDOM && (selected.val[5] & 0xc0) == 0xc0);
     }
-    if (std::strlen(text) != 17)
+    std::array<uint8_t, 6> address;
+    if (!parse_peer_address(text, address))
         return false;
-    uint8_t address[6];
-    for (size_t i = 0; i < 6; ++i) {
-        if (i < 5 && text[i * 3 + 2] != ':')
-            return false;
-        unsigned octet = 0;
-        for (size_t digit = 0; digit < 2; ++digit) {
-            char c = text[i * 3 + digit];
-            int nibble = c >= '0' && c <= '9'   ? c - '0'
-                         : c >= 'a' && c <= 'f' ? c - 'a' + 10
-                         : c >= 'A' && c <= 'F' ? c - 'A' + 10
-                                                : -1;
-            if (nibble < 0)
-                return false;
-            octet = (octet << 4) | unsigned(nibble);
-        }
-        address[5 - i] = uint8_t(octet);
-    }
-    if (!find_discovered_trv(address, selected, pairing_required)) {
+    if (!find_discovered_trv(address.data(), selected, pairing_required)) {
         std::printf("Target must be an unambiguous recently discovered TRV");
         if (pairing_required)
             std::printf(" in pairing mode with PIN protection off");
@@ -730,9 +739,66 @@ void enrollment_status() {
         std::printf("TRV bindings storage_error=%d; no automatic erase\n", int(err));
         return;
     }
-    const char *states[] = {"empty", "pending", "verified"};
+    const char *states[] = {"empty", "pending", "verified", "removing"};
     for (size_t i = 0; i < table.capacity; ++i)
         std::printf("TRV enrollment slot=%u state=%s\n", unsigned(i), states[size_t(table.slots[i].state)]);
+}
+esp_err_t forget_slot(size_t slot, const std::optional<std::array<uint8_t, 6>> &expected_peer) {
+    bridge::Enrollment table;
+    if (auto rc = load_trv_bindings(table); rc != ESP_OK)
+        return rc;
+    if (!table.begin_removal(slot, expected_peer))
+        return ESP_ERR_NOT_FOUND;
+    if (auto rc = save_trv_bindings(table); rc != ESP_OK)
+        return rc;
+    // A power cut from this point leaves a reserved, non-controllable slot.
+    // Every cleanup step can be repeated for that exact binding.
+    invalidate_trv_position(slot);
+    const auto &binding = table.slots[slot];
+    ble_addr_t address{};
+    address.type = binding.address_type;
+    std::copy(binding.address.begin(), binding.address.end(), address.val);
+    const int rc = ble_gap_unpair(&address);
+    if (rc && rc != BLE_HS_ENOENT) {
+        std::printf("TRV forget bond_error=%d\n", rc);
+        return ESP_FAIL;
+    }
+    if (peer_has_key(address))
+        return ESP_ERR_INVALID_STATE;
+    if (auto err = remove_trv_endpoint(slot, binding.identity); err != ESP_OK)
+        return err;
+    if (!table.finish_removal(slot))
+        return ESP_ERR_INVALID_STATE;
+    if (auto err = save_trv_bindings(table); err != ESP_OK)
+        return err;
+    portENTER_CRITICAL(&snapshot_lock);
+    if (snapshot.slot == int(slot))
+        snapshot = {};
+    for (auto &entry : position_history)
+        if (entry && entry->slot == int(slot))
+            entry.reset();
+    if (!position_history[0])
+        position_history[0].swap(position_history[1]);
+    portEXIT_CRITICAL(&snapshot_lock);
+    return ESP_OK;
+}
+int forget_command(int argc, char **argv) {
+    if ((argc != 2 && argc != 3) || std::strlen(argv[1]) != 1 || argv[1][0] < '0' ||
+        argv[1][0] >= '0' + int(bridge::Enrollment::capacity))
+        return 1;
+    const size_t slot = size_t(argv[1][0] - '0');
+    std::optional<std::array<uint8_t, 6>> expected_peer;
+    if (argc == 3 && !parse_peer_address(argv[2], expected_peer.emplace()))
+        return 1;
+    bool idle = false;
+    if (!ble_hs_synced() || !active.compare_exchange_strong(idle, true)) {
+        std::printf("TRV forget busy\n");
+        return 1;
+    }
+    const auto result = forget_slot(slot, expected_peer);
+    active.store(false);
+    std::printf("TRV forget slot=%u result=%s\n", unsigned(slot), esp_err_to_name(result));
+    return result == ESP_OK ? 0 : 1;
 }
 int set_position_command(int argc, char **argv) {
     if (argc == 2 && std::strcmp(argv[1], "history") == 0) {
@@ -814,6 +880,12 @@ void register_trv_gatt_probe() {
         "Direct bonded USB test: trv_position SLOT EXPECTED_PERCENT TARGET_PERCENT | status | history";
     position.func = set_position_command;
     ESP_ERROR_CHECK(esp_console_cmd_register(&position));
+    esp_console_cmd_t forget{};
+    forget.command = "trv_forget";
+    forget.help =
+        "Remove one bridge enrollment, local bond and Matter endpoint: trv_forget SLOT [PRIVATE_MAC]";
+    forget.func = forget_command;
+    ESP_ERROR_CHECK(esp_console_cmd_register(&forget));
     esp_console_cmd_t command{};
     command.command = "trv_probe";
     command.help = "Read-only GATT probe: trv_probe PRIVATE_MAC|status; run trv_discover first";

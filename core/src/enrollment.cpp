@@ -19,7 +19,8 @@ bool Enrollment::valid() const {
                 return false;
             continue;
         }
-        if (b.state != EnrollmentState::pending && b.state != EnrollmentState::verified)
+        if (b.state != EnrollmentState::pending && b.state != EnrollmentState::verified &&
+            b.state != EnrollmentState::removing)
             return false;
         if (b.address_type > 1 || zero(b.address) || zero(b.identity) ||
             (b.address_type == 1 && (b.address[5] & 0xc0) != 0xc0))
@@ -47,10 +48,25 @@ bool Enrollment::begin_repair(size_t slot, uint8_t type, const std::array<uint8_
     if (slot >= capacity || !valid())
         return false;
     auto &binding = slots[slot];
-    if (binding.state == EnrollmentState::empty || binding.address_type != type ||
-        binding.address != selected)
+    if (binding.state == EnrollmentState::empty || binding.state == EnrollmentState::removing ||
+        binding.address_type != type || binding.address != selected)
         return false;
     binding.state = EnrollmentState::pending;
+    return true;
+}
+bool Enrollment::begin_removal(size_t slot, const std::optional<std::array<uint8_t, 6>> &expected_peer) {
+    if (slot >= capacity || !valid())
+        return false;
+    auto &binding = slots[slot];
+    if (binding.state == EnrollmentState::empty || (expected_peer && binding.address != *expected_peer))
+        return false;
+    binding.state = EnrollmentState::removing;
+    return true;
+}
+bool Enrollment::finish_removal(size_t slot) {
+    if (slot >= capacity || slots[slot].state != EnrollmentState::removing)
+        return false;
+    slots[slot] = {};
     return true;
 }
 std::array<uint8_t, Enrollment::encoded_size> Enrollment::encode() const {

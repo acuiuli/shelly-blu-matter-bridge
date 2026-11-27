@@ -35,6 +35,8 @@ The original endpoint reported reachable at 0%. In HA the operator then set
 each target. HA briefly showed unavailable during both commands on the first
 image. After the S3 update, the same HA cycle passed again, the valve stayed
 available and the endpoint recorded zero reachability losses.
+The same report records [verified removal from the bridge](2026-11-27-direct-enrollment.md#preparing-an-empty-slot-for-first-enrollment).
+The empty slot and absence of the retired endpoint survived an S3 reboot.
 
 ## Original foundation validation
 

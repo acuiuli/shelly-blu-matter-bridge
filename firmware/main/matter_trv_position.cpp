@@ -192,6 +192,10 @@ void stop_valve(uint16_t ep, ClusterShutdownType reason) {
 }
 constexpr size_t record_size = 2 + bridge::EnrollmentId{}.size();
 using EndpointRecord = std::array<uint8_t, record_size>;
+struct NvsCloser {
+    nvs_handle_t h;
+    ~NvsCloser() { nvs_close(h); }
+};
 
 esp_err_t create_endpoint(size_t slot, const bridge::EnrollmentId &id) {
     // Store the SDK-assigned endpoint id together with the physical enrollment
@@ -200,10 +204,7 @@ esp_err_t create_endpoint(size_t slot, const bridge::EnrollmentId &id) {
     esp_err_t err = nvs_open_from_partition("bridge_store", "matter_trv_v1", NVS_READWRITE, &nvs);
     if (err != ESP_OK)
         return err;
-    struct Close {
-        nvs_handle_t h;
-        ~Close() { nvs_close(h); }
-    } close{nvs};
+    NvsCloser close{nvs};
     const char key[] = {'s', char('0' + slot), 0};
     EndpointRecord record{};
     size_t size = record.size();
@@ -310,6 +311,53 @@ void invalidate_trv_position(size_t slot) {
     portENTER_CRITICAL(&feed_lock);
     feeds[slot] = {};
     portEXIT_CRITICAL(&feed_lock);
+}
+esp_err_t remove_trv_endpoint(size_t slot, const bridge::EnrollmentId &id) {
+    if (slot >= capacity)
+        return ESP_ERR_INVALID_ARG;
+    // Called by the USB task with downstream operations excluded. Serialize
+    // the endpoint record, the live server and PartsList updates with Matter.
+    esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+    auto &d = devices[slot];
+    if (d.ep != chip::kInvalidEndpointId && d.identity != id)
+        return ESP_ERR_INVALID_STATE;
+    nvs_handle_t nvs;
+    auto err = nvs_open_from_partition("bridge_store", "matter_trv_v1", NVS_READWRITE, &nvs);
+    if (err != ESP_OK)
+        return err;
+    NvsCloser close{nvs};
+    const char key[] = {'s', char('0' + slot), 0};
+    EndpointRecord record{};
+    size_t size = record.size();
+    err = nvs_get_blob(nvs, key, record.data(), &size);
+    const bool has_record = err == ESP_OK;
+    if (has_record) {
+        const uint16_t saved = uint16_t(record[0] | (uint16_t(record[1]) << 8));
+        if (size != record.size() || std::memcmp(record.data() + 2, id.data(), id.size()) || saved < 10 ||
+            saved == chip::kInvalidEndpointId || (d.ep != saved && endpoint::get(saved)))
+            return ESP_ERR_INVALID_STATE;
+        if (d.ep != chip::kInvalidEndpointId && d.ep != saved)
+            return ESP_ERR_INVALID_STATE;
+    } else if (err != ESP_ERR_NVS_NOT_FOUND) {
+        return err;
+    }
+    invalidate_trv_position(slot);
+    if (d.ep != chip::kInvalidEndpointId) {
+        if (auto *ep = endpoint::get(d.ep)) {
+            if (auto rc = endpoint::destroy(node::get(), ep); rc != ESP_OK)
+                return rc;
+        }
+        if (servers[slot].IsConstructed()) {
+            stop_valve(d.ep, ClusterShutdownType::kPermanentRemove);
+            if (servers[slot].IsConstructed())
+                return ESP_ERR_INVALID_STATE;
+        }
+    }
+    d = {};
+    if (!has_record)
+        return ESP_OK; // pending enrollment, or cleanup resumed after record deletion
+    err = nvs_erase_key(nvs, key);
+    return err == ESP_OK ? nvs_commit(nvs) : err;
 }
 void publish_trv_positions() {
     for (size_t i = 0; i < capacity; ++i) {

@@ -39,6 +39,25 @@ int main() {
     CHECK(restored->begin_repair(0, 0, a.address));
     CHECK(restored->encode() == saved);
     CHECK(restored->begin_repair(0, 0, a.address)); // resume a pending repair after interruption
+    auto removing = Enrollment::decode(verified.data(), verified.size());
+    CHECK(removing && !removing->begin_removal(0, b.address));
+    CHECK(!removing->finish_removal(0));
+    CHECK(removing->encode() == verified);
+    CHECK(removing->begin_removal(0, a.address));
+    auto interrupted = removing->encode();
+    removing = Enrollment::decode(interrupted.data(), interrupted.size());
+    CHECK(removing && removing->slots[0].state == EnrollmentState::removing);
+    CHECK(!removing->begin_repair(0, 0, a.address));
+    CHECK(!removing->reserve(2, a));
+    CHECK(removing->begin_removal(0, a.address));
+    CHECK(removing->finish_removal(0));
+    CHECK(!removing->begin_removal(0, std::nullopt));
+    auto new_enrollment = a;
+    new_enrollment.identity[0] = 3;
+    CHECK(removing->reserve(0, new_enrollment));
+    CHECK(removing->slots[1].identity == b.identity);
+    CHECK(removing->begin_removal(0, std::nullopt)); // pending first enrollment is removable too
+    CHECK(!removing->begin_removal(Enrollment::capacity, std::nullopt));
     CHECK(!Enrollment::decode(saved.data(), saved.size() - 1));
     CHECK(!Enrollment::decode(nullptr, saved.size()));
     for (auto offset : {0, 4, 5, 6, 7, 8}) {

@@ -129,3 +129,22 @@ The endpoint finished reachable at 0%, with two completed commands and zero
 blocked commands. This run covers one installed valve, two target levels and
 successful writes. A disconnected valve during a write, the full position
 range and multi-valve operation still require hardware tests.
+
+## Preparing an empty slot for first enrollment
+
+The installed radiator started in verified slot 0, on endpoint 10, at 0%.
+The selected valve was still absent from the vendor gateway and the other two
+radiators' configurations matched their saved values. The S3 application
+with the USB forget command was built locally and verified after flashing.
+Its SHA-256 was `72060fb28386100849b27ce76476f1692346e7b8ef3de13e85daa70558f2baa3`.
+
+1. A forget request with a mismatched address was rejected. Slot 0 remained verified.
+2. A request for the selected slot and matching address succeeded. All four
+   physical slots read empty and endpoint 10 disappeared from bridge diagnostics.
+3. After an S3 hardware restart, the endpoint was still absent. The four
+   simulated valves and the existing fabric count were preserved, and the S3
+   reattached to Thread. A reconnect against empty slot 0 returned
+   `BLE_HS_ENOENT` before a BLE connection.
+
+This removal is local to the bridge and can precede or follow the radiator's
+physical reset. The next enrollment starts with a freshly generated identity.
