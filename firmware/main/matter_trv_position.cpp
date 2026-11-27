@@ -35,6 +35,7 @@ struct Published {
     uint64_t next_poll = 0;
     uint64_t last_publish = 0;
     uint32_t blocked_commands = 0;
+    uint32_t reachability_losses = 0;
     bool registered = false;
 };
 std::array<Published, capacity> devices;
@@ -310,10 +311,12 @@ void invalidate_trv_position(size_t slot) {
     feeds[slot] = {};
     portEXIT_CRITICAL(&feed_lock);
 }
-void publish_trv_positions(uint64_t now) {
+void publish_trv_positions() {
     for (size_t i = 0; i < capacity; ++i) {
         auto &d = devices[i];
         const auto feed = get_feed(i);
+        // BLE can publish a newer observation while the Matter task is running.
+        const uint64_t now = esp_timer_get_time() / 1000;
         if (d.ep == chip::kInvalidEndpointId) {
             if (!feed.binding || now < d.next_poll)
                 continue;
@@ -336,8 +339,11 @@ void publish_trv_positions(uint64_t now) {
         if (level.has_value() != d.reachable) {
             auto v = esp_matter_bool(level.has_value());
             if (attribute::update(d.ep, BridgedDeviceBasicInformation::Id,
-                                  BridgedDeviceBasicInformation::Attributes::Reachable::Id, &v) == ESP_OK)
+                                  BridgedDeviceBasicInformation::Attributes::Reachable::Id, &v) == ESP_OK) {
                 d.reachable = level.has_value();
+                if (!d.reachable)
+                    ++d.reachability_losses;
+            }
         }
         if (bound && now >= d.next_poll && (!level || now - feed.sample.observed_ms >= poll_ms)) {
             d.next_poll = now + (queue_position_read(i) ? 60000 : 5000);
@@ -350,11 +356,12 @@ void show_trv_positions(uint64_t now) {
         const auto feed = get_feed(i);
         if (d.ep != chip::kInvalidEndpointId)
             std::printf("Physical TRV slot=%u endpoint=%u reachable=%u confirmed_position=%d age_ms=%lld "
-                        "blocked_commands=%lu matter_completed=%lu last_result=%d\n",
+                        "blocked_commands=%lu matter_completed=%lu last_result=%d reachability_losses=%lu\n",
                         unsigned(i), unsigned(d.ep), unsigned(d.reachable),
                         d.reachable && d.last_level ? int(*d.last_level) : -1,
                         d.last_publish ? static_cast<long long>(now - d.last_publish) : -1LL,
                         static_cast<unsigned long>(d.blocked_commands),
-                        static_cast<unsigned long>(feed.completions), feed.last_result);
+                        static_cast<unsigned long>(feed.completions), feed.last_result,
+                        static_cast<unsigned long>(d.reachability_losses));
     }
 }

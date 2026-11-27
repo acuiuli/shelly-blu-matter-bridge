@@ -28,7 +28,13 @@ The [isolated radiator test](2026-11-27-direct-enrollment.md) records a Matter
 Close issued from a confirmed 16%, its immediate zero and its delayed reversal,
 followed by removal of the selected Shelly gateway association. The bridge then
 read all five fields over its existing bond. The valve declined the first
-fresh pairing request and the original endpoint reported unavailable.
+fresh pairing request. On the second physical pairing window, the bridge
+established a fresh bond in the same slot and independently reconnected.
+The original endpoint reported reachable at 0%. In HA the operator then set
+20% and closed the valve. Both immediate and 12-second device reads matched
+each target. HA briefly showed unavailable during both commands on the first
+image. After the S3 update, the same HA cycle passed again, the valve stayed
+available and the endpoint recorded zero reachability losses.
 
 ## Original foundation validation
 

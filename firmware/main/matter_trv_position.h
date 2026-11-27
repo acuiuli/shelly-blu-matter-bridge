@@ -4,7 +4,7 @@
 #include <cstddef>
 
 void initialize_position_bindings();
-void publish_trv_positions(uint64_t now_ms);
+void publish_trv_positions();
 void show_trv_positions(uint64_t now_ms);
 void observe_trv_position(size_t slot, const bridge::EnrollmentId &source, uint8_t percent, uint64_t now_ms);
 void expire_trv_position_sample(size_t slot, const bridge::EnrollmentId &id);

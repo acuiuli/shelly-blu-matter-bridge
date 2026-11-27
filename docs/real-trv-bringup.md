@@ -144,9 +144,11 @@ the old local key before the new pairing completes, so the Matter valve can
 become unreachable. If the slot is pending and reconnect reports
 `BLE_HS_EAUTHEN`, start a short discovery scan as the operator opens a fresh
 pairing window. Use `trv_enroll SLOT SESSION:INDEX` for the same peer and pending
-slot. Verify all five reads over the bonded link and a second encrypted connection before
-using the valve in HA. The TRV displays `bLE` during its 30-second window.
-[TRV button and display](https://kb.shelly.cloud/knowledge-base/shelly-blu-trv)
+slot. Verify all five reads over the bonded link and a second encrypted
+connection before using the valve in HA. One installed valve recovered its
+original endpoint using this procedure after the Shelly gateway association
+was removed. The TRV displays `bLE` during its 30-second window.
+[Recovery measurements](validation/2026-11-27-direct-enrollment.md#renewing-the-bond-after-gateway-removal) · [TRV button and display](https://kb.shelly.cloud/knowledge-base/shelly-blu-trv)
 
 Verify encrypted reconnect after S3 restart and TRV battery replacement before
 depending on the bridge. Keep all console captures and identifiers private. Production
@@ -286,6 +288,11 @@ Coordinate other writers for this radiator and record its live starting position
    its explicit expected-start check.
 3. Restore the measured starting position using the same Matter entity. Use
    **Valve: Close** for zero. Read `trv_position history` to record both operations. Check the HA state and percentage together.
+4. On the same boot, compare `reachability_losses` in `diag` before and after
+   the cycle. It counts reports that this endpoint became unreachable. A healthy
+   cycle should leave the counter unchanged and HA should keep the valve
+   available during both commands. The last observed percentage is valid while
+   the next read is in flight. A failed write confirmation still expires it.
 
 The bridge accepts one BLE operation at a time. A busy request must be issued
 again by the caller after fresh feedback. Finite timed opens and finite default

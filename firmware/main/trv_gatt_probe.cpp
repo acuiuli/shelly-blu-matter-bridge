@@ -265,8 +265,8 @@ void apply_position_request() {
         disconnect(err);
         return;
     }
-    // The pre-write sample no longer describes the outcome of this command.
-    expire_trv_position_sample(selected_slot, bindings.slots[selected_slot].identity);
+    // Keep the confirmed preflight level while the encrypted link is writing.
+    // Readbacks publish motion; finish() expires the sample if confirmation fails.
     portENTER_CRITICAL(&snapshot_lock);
     snapshot.submitted = true;
     portEXIT_CRITICAL(&snapshot_lock);

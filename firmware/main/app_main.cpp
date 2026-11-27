@@ -175,7 +175,7 @@ static void publish(intptr_t) {
             esp_matter_nullable_uint8(s.reachable ? nullable<uint8_t>(t.battery * 2) : nullable<uint8_t>()));
         publish_valve(d, s);
     }
-    publish_trv_positions(now_ms());
+    publish_trv_positions();
     publishing = false;
     confirm_boot_health();
 }

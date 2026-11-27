@@ -5,9 +5,12 @@ Thread upstream, BLE downstream**, on the Espressif ESP32-S3 + ESP32-H2 Main Boa
 The prototype includes four simulated TRVs and experimental percentage control for enrolled physical valves. **Full gateway replacement
 remains unvalidated.**
 
-Home Assistant has controlled one enrolled radiator through the bridge. Clean
-onboarding without the original gateway and sustained control still need testing.
-[Hardware validation results](docs/validation/2026-11-26-matter-position.md)
+Home Assistant has controlled one installed radiator through the bridge. After
+its removal from the Shelly gateway, the radiator paired directly with the bridge
+again and recovered the same Matter endpoint. HA then set 20% and closed the
+valve. Both positions held through the delayed reads. Onboarding a factory-new
+valve and long-term control still need testing.
+[Hardware validation results](docs/validation/2026-11-27-direct-enrollment.md)
 
 > This project is independent and unaffiliated with Shelly. It is not presented as
 > certified by Shelly, the Connectivity Standards Alliance, or any other body.
@@ -38,13 +41,13 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 | --- | --- | --- | --- |
 | Temperature, setpoint, Off/Heat | Thermostat | Simulator + Matter model | Host core tests; four HA climates discovered; HA writes pending |
 | Valve percentage and feedback | Valve Configuration and Control, Level feature | Simulator + native Matter delegate + child valve endpoint | Fault tests; four HA valves discovered; HA command and confirmed 60% feedback; conformance pending |
-| Physical valve position | Valve Configuration and Control, CurrentLevel and CurrentState | Standard Open/Close on a separately identified Matter endpoint, with bonded GATT preflight and readback | [HA showed 20%/open after Set Position and 0%/closed after Close. The Close preflight already read zero. Endpoint and bond recovered after S3 reboot](docs/validation/2026-11-26-matter-position.md) |
+| Physical valve position | Valve Configuration and Control, CurrentLevel and CurrentState | Standard Open/Close on a separately identified Matter endpoint, with bonded GATT preflight and readback | [HA set 20% and closed one isolated radiator. Immediate and delayed reads confirmed each position](docs/validation/2026-11-27-direct-enrollment.md#home-assistant-movement-after-direct-enrollment) |
 | Battery | Power Source | Simulated percentage | Battery entities discovered in HA |
 | Identity, availability | Bridged Device Basic Information | Stable slots + separate NVS identity | Host tests and unchanged identity partition across reboot; commissioning/OTA persistence pending |
 | Thread FTD without Wi-Fi | S3 host / H2 UART RCP | Build configuration and runtime setup | Commissioned in HA, elected Thread router; Wi-Fi uninitialized |
 | BLE after commissioning | NimBLE central/observer | Scan diagnostics and bonded GATT client | Post-HA scanning and reads on one real TRV while attached to Thread |
 | Real TRV discovery/read | Shelly manufacturer metadata and direct GATT | Bounded USB discovery and read probe | Six candidates discovered; one installed 1.5.0 valve paired and all five protected-session reads passed |
-| Direct enrollment and valve-only setup | USB configuration, bonded GATT | Persistent peer reservations/bonds; explicit regulator-disable command with readback | [One installed TRV reconnected after S3 reboot](docs/validation/2026-11-25-first-bond.md); already-disabled regulator confirmed. Actual flag change and clean onboarding pending |
+| Direct enrollment and valve-only setup | USB configuration, bonded GATT | Persistent peer reservations/bonds; explicit regulator-disable command with readback | [Reconnect after S3 reboot](docs/validation/2026-11-25-first-bond.md) and [fresh bond after removing the Shelly gateway association](docs/validation/2026-11-27-direct-enrollment.md). The regulator was already off. First enrollment of a factory-new valve and a regulator change remain untested |
 | Direct physical position command | USB development console | One bonded write with a fresh starting-position check and immediate and delayed readback | [USB guard tests](docs/validation/2026-11-26-matter-position.md). S3-commanded 20% read back immediately, then reverted to 0% after 12 seconds |
 | Gateway OTA | Matter OTA Requestor | Enabled; two S3 slots and boot rollback check | Installation/rollback pending |
 | Maintenance and TRV updates | Standard mappings under investigation | Documentation only | Release blockers |
