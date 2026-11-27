@@ -41,10 +41,10 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 | Capability | Planned interface | Implemented | Validated |
 | --- | --- | --- | --- |
 | Temperature, setpoint, Off/Heat | Thermostat | Simulator + Matter model | Host core tests; four HA climates discovered; HA writes pending |
-| Physical measured temperature | Temperature Measurement | Read-only sensor on the enrolled valve endpoint | [The bridge published 20.5°C with a separate 20.0°C setpoint](docs/validation/2026-11-27-physical-sensors.md) |
+| Physical measured temperature | Temperature Measurement | Read-only sensor on the enrolled valve endpoint | [The bridge published 20.5°C with a separate 20.0°C setpoint. HA discovered the temperature sensor after a bridge re-interview](docs/validation/2026-11-27-physical-sensors.md) |
 | Valve percentage and feedback | Valve Configuration and Control, Level feature | Simulator + native Matter delegate + child valve endpoint | Fault tests; four HA valves discovered; HA command and confirmed 60% feedback; conformance pending |
 | Physical valve position | Valve Configuration and Control, CurrentLevel and CurrentState | Standard Open/Close on a separately identified Matter endpoint, with bonded GATT preflight and readback | [HA set 20% and closed one isolated radiator. Immediate and delayed reads confirmed each position](docs/validation/2026-11-27-direct-enrollment.md#home-assistant-movement-after-direct-enrollment) |
-| Battery | Power Source | Simulated percentage and read-only battery level from the enrolled radiator | Simulated entities discovered in HA. [One physical radiator reported 38%](docs/validation/2026-11-27-physical-sensors.md) |
+| Battery | Power Source | Simulated percentage and read-only battery level from the enrolled radiator | [HA displayed 38% on one physical radiator](docs/validation/2026-11-27-physical-sensors.md) |
 | Identity, availability | Bridged Device Basic Information | Stable slots + separate NVS identity | Host tests and unchanged identity partition across reboot; commissioning/OTA persistence pending |
 | Thread FTD without Wi-Fi | S3 host / H2 UART RCP | Build configuration and runtime setup | Commissioned in HA, elected Thread router; Wi-Fi uninitialized |
 | BLE after commissioning | NimBLE central/observer | Scan diagnostics and bonded GATT client | Post-HA scanning and reads on one real TRV while attached to Thread |

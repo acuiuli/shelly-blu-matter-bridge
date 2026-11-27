@@ -28,7 +28,14 @@ valve reported 11% open. An independent bonded reconnect completed in 3.506 s,
 confirmed a 20.0°C target, 11% opening, regulator disabled (functions mask
 160), completed calibration and zero errors. Its sensor read also succeeded.
 The Matter attributes still reported 20.5°C and 38% after the reconnect.
+At the next scheduled poll, the bridge read and published 20.2°C, 38% battery
+and 11% opening. That automatic BLE transaction completed in 2.233 s.
 
-These observations cover one installed valve. Repeated polling on four valves,
-stale readings after a physical disconnect and controller discovery are
-separate validation steps.
+On the existing HA device the operator saw **Batteria** at 38% and a separate
+battery status of **Normal**. The percentage comes from the radiator. The SDK
+initializes the charge-level status to Normal, and the BLE sample supplied no
+charge-level category. The temperature sensor was absent on that first check.
+After the operator re-interviewed the parent bridge in HA, the temperature
+sensor appeared on the same valve device. The operator confirmed its presence
+and did not provide a numeric UI reading. Repeated polling on four valves and
+stale readings after a physical disconnect are separate validation steps.

@@ -44,7 +44,8 @@ After an S3 restart, the operator confirmed the new HA Matter valve showed 11%.
 [Factory-reset enrollment measurements](2026-11-27-direct-enrollment.md#first-enrollment-after-a-physical-factory-reset)
 
 The bridge then published measured temperature (20.5°C) and battery (38%)
-on that endpoint. A separate encrypted read confirmed the 20.0°C setpoint
+on that endpoint. HA displayed 38% and discovered the temperature sensor after
+a bridge re-interview. A separate encrypted read confirmed the 20.0°C setpoint
 and disabled regulator. [Physical sensor validation](2026-11-27-physical-sensors.md)
 
 ## Original foundation validation

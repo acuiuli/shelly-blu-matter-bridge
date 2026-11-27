@@ -41,6 +41,12 @@ the optional sensor read separately from the position read. A missing or
 unsupported sample can leave the valve available while its sensors have no
 current value.
 
+If an existing HA valve shows only battery after upgrading the S3, check
+`diag` for a published temperature first. On the parent Matter bridge's
+device page, open **Device info → ⋮ → Re-interview device**. Then check the
+physical valve's **Sensors** section again. HA discovers temperature from
+Temperature Measurement's MeasuredValue. [HA sensor discovery](https://github.com/home-assistant/core/blob/dev/homeassistant/components/matter/sensor.py) · [HA Matter device interview](https://www.home-assistant.io/blog/2024/02/07/release-20242/#matter-diagnostics-and-actions)
+
 ## 1. Identify and record the baseline
 
 Record model, firmware, target, reported position, calibration/errors, automatic
