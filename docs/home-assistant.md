@@ -17,6 +17,16 @@ repeat these checks after direct BLE enrollment with the original gateway absent
 for the test valve. Client-specific adapters belong in their
 respective projects. See the [capability matrix](matter-mapping.md).
 
+## Temperature entities
+
+An enrolled radiator can have two HA sensors named **Temperature**
+(**Temperatura** in Italian). The standalone sensor reads
+`TemperatureMeasurement.MeasuredValue`. HA also creates a sensor from
+`Thermostat.LocalTemperature` on the same endpoint and uses that attribute as
+the climate entity's current temperature. The bridge feeds both attributes
+from the same BLE measurement. The requested heating target is a separate
+value, `Thermostat.OccupiedHeatingSetpoint`. [HA Matter sensor mappings](https://github.com/home-assistant/core/blob/2026.11.3/homeassistant/components/matter/sensor.py) · [HA Matter climate entity](https://github.com/home-assistant/core/blob/2026.11.3/homeassistant/components/matter/climate.py)
+
 ## Better Thermostat compatibility baseline
 
 2.0.0-Beta2 remains the original comparison baseline. Its generic adapter lacks

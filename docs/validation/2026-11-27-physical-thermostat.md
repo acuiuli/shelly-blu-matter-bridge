@@ -12,6 +12,30 @@ reattached to Thread, recovered the existing endpoint and bond, and reported
 a 20.0°C heating target, 19.9°C measured, 38% battery, a 4.0–30.0°C range
 and 11% valve opening. Home Assistant was already commissioned.
 
+## Home Assistant setpoint write and restoration
+
+The operator sent `climate.set_temperature` to the enrolled radiator twice,
+first to change its target and then to restore it. The bridge recorded an
+acknowledged BLE write for each request, read the target on the same
+connection and read it again on a separate encrypted, bonded connection.
+
+| HA target change | Bonded write and readback | Independent reconnect | Opening on both reads |
+| --- | --- | --- | --- |
+| 20.0°C → 20.5°C | 20.5°C in 8.637 s | 20.5°C in 4.287 s | 11% |
+| 20.5°C → 20.0°C | 20.0°C in 7.961 s | 20.0°C in 2.654 s | 11% |
+
+Durations are for the bridge's BLE operations. All four readbacks returned
+the original functions mask of 160, completed calibration and zero errors.
+The final reconnect confirmed the radiator was back at its original target
+with automatic regulation off.
+
+The operator also saw two HA sensors named **Temperatura**, each at 19.9°C.
+The endpoint publishes the same measured sample through both Temperature
+Measurement and Thermostat. HA creates a sensor for each attribute.
+[HA entity mapping](../home-assistant.md#temperature-entities)
+
+## Test scope
+
 The four host test suites and five packaging tests passed. The setpoint
 tests cover device limits, unsupported precision, a changed starting target or
 regulator mask, expiration, single-use requests and confirmation of both target

@@ -48,8 +48,9 @@ on that endpoint. HA displayed 38% and discovered the temperature sensor after
 a bridge re-interview. A separate encrypted read confirmed the 20.0°C setpoint
 and disabled regulator. [Physical sensor validation](2026-11-27-physical-sensors.md)
 
-The [physical thermostat test](2026-11-27-physical-thermostat.md) records
-the heating setpoint and regulator observations on the same radiator.
+HA set the same radiator to 20.5°C and restored its original 20.0°C target.
+An independent bonded reconnect after each write confirmed the target, 11%
+opening and disabled regulator. [Physical thermostat test](2026-11-27-physical-thermostat.md)
 
 ## Original foundation validation
 
