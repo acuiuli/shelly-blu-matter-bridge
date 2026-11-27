@@ -17,6 +17,7 @@
 #include <esp_random.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
+#include <host/ble_att.h>
 #include <host/ble_gap.h>
 #include <host/ble_gatt.h>
 #include <host/ble_hs.h>
@@ -64,6 +65,7 @@ struct Snapshot {
     bool submitted = false, acknowledged = false;
     std::optional<int> first_position, later_position;
     bool encrypted = false, bonded = false, authenticated = false;
+    std::optional<int> sensor_result;
 };
 Snapshot snapshot;
 std::array<std::optional<Snapshot>, 2> position_history; // newest completed command first
@@ -76,6 +78,8 @@ bridge::TrvPositionWrite position_request;
 bridge::EnrollmentId requested_identity{};
 ble_addr_t peer;
 ble_uuid_any_t service_uuid;
+ble_uuid_any_t sample_uuid;
+uint16_t sample_handle = 0;
 std::array<ble_uuid_any_t, field_count> characteristic_uuids;
 std::array<uint16_t, field_count> handles{};
 uint16_t connection = BLE_HS_CONN_HANDLE_NONE;
@@ -271,6 +275,28 @@ void apply_position_request() {
     snapshot.submitted = true;
     portEXIT_CRITICAL(&snapshot_lock);
 }
+void finish_sensor_read(int rc, std::optional<bridge::TrvSensorSample> sample = {}) {
+    record_trv_sensor_read(selected_slot, bindings.slots[selected_slot].identity, sample);
+    portENTER_CRITICAL(&snapshot_lock);
+    snapshot.sensor_result = rc;
+    portEXIT_CRITICAL(&snapshot_lock);
+    disconnect(0); // Optional sensors have their own result; the primary position read passed.
+}
+int sample_read(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *attr, void *) {
+    if (!active.load() || stopping || conn != connection)
+        return 0;
+    std::optional<bridge::TrvSensorSample> sample;
+    if (!error->status && secure_peer() && attr && attr->om) {
+        const size_t size = OS_MBUF_PKTLEN(attr->om);
+        uint8_t bytes[64];
+        // A short ATT read at the MTU limit could be just the first fragment.
+        if (size <= sizeof(bytes) && size + 1 < ble_att_mtu(conn) &&
+            os_mbuf_copydata(attr->om, 0, size, bytes) == 0)
+            sample = bridge::decode_trv_sensor_sample(bytes, size);
+    }
+    finish_sensor_read(error->status ? error->status : (sample ? 0 : BLE_HS_EBADDATA), sample);
+    return 0;
+}
 void reads_complete() {
     if (operation == Operation::probe) {
         disconnect(successes ? 0 : BLE_HS_ENOENT);
@@ -296,6 +322,13 @@ void reads_complete() {
                          uint8_t(*snapshot.values[position_field]), position_observed_ms);
     if (writes_position(operation)) {
         apply_position_request();
+        return;
+    }
+    if (poll || operation == Operation::reconnect) {
+        const int err =
+            sample_handle ? ble_gattc_read(connection, sample_handle, sample_read, nullptr) : BLE_HS_ENOENT;
+        if (err)
+            finish_sensor_read(err);
         return;
     }
     if (operation != Operation::valve_only) {
@@ -371,6 +404,8 @@ int characteristic(uint16_t conn, const ble_gatt_error *error, const ble_gatt_ch
     if (!active.load() || stopping || conn != connection)
         return 0;
     if (!error->status && chr) {
+        if (ble_uuid_cmp(&chr->uuid.u, &sample_uuid.u) == 0)
+            sample_handle = chr->val_handle;
         for (size_t i = 0; i < field_count; ++i)
             if (ble_uuid_cmp(&chr->uuid.u, &characteristic_uuids[i].u) == 0)
                 handles[i] = chr->val_handle;
@@ -491,6 +526,7 @@ void start_probe(ble_npl_event *) {
         return;
     }
     handles = {};
+    sample_handle = 0;
     service_start = service_end = 0;
     successes = 0;
     position_observed_ms = 0;
@@ -601,6 +637,8 @@ void print_snapshot(const Snapshot &value) {
     std::printf("TRV operation=%s slot=%d encrypted=%u bonded=%u authenticated=%u\n",
                 operations[size_t(value.operation)], value.slot, unsigned(value.encrypted),
                 unsigned(value.bonded), unsigned(value.authenticated));
+    if (value.sensor_result)
+        std::printf("TRV sensor_read result=%d\n", *value.sensor_result);
     if (writes_position(value.operation))
         std::printf("TRV position submitted=%u acknowledged=%u first=%d later=%d expected=%d target=%d "
                     "preflight=%d\n",
@@ -862,6 +900,8 @@ bool queue_matter_position(size_t slot, const bridge::EnrollmentId &id, uint8_t 
 
 bool trv_gatt_probe_active() { return active.load(); }
 void register_trv_gatt_probe() {
+    ESP_ERROR_CHECK(ble_uuid_from_str(&sample_uuid, "d52246df-98ac-4d21-be1b-70d5f66a5ddb") == 0 ? ESP_OK
+                                                                                                 : ESP_FAIL);
     ESP_ERROR_CHECK(ble_uuid_from_str(&service_uuid, "de8a5aac-a99b-c315-0c80-60d4cbb51225") == 0 ? ESP_OK
                                                                                                   : ESP_FAIL);
     for (size_t i = 0; i < field_count; ++i)

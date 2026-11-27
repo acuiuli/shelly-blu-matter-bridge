@@ -15,7 +15,8 @@ Commission the bridge into HA once using Matter. Enroll each BLE TRV directly wi
 the bridge over private USB, using the TRV's physical pairing mode. No Shelly account,
 app or vendor gateway is a prerequisite for that intended flow. HA will receive the
 physical valve through the existing Matter bridge. Each BLE valve needs no Matter
-pairing code. Physical thermostat and battery reporting are future steps.
+pairing code. The same physical endpoint exposes measured temperature and battery
+as read-only Matter sensors. A writable physical thermostat remains a separate milestone.
 
 Initial setup must offer **valve-only control** explicitly. Selecting it disables the
 TRV's automatic temperature regulator over BLE and verifies the setting on the valve.
@@ -34,6 +35,11 @@ automations attached to the existing control path during this read-only test.
 
 The physical Matter endpoint accepts standard Open, Close and percentage commands. Use `trv_reconnect 0` for an immediate encrypted read and
 wait for completion before checking `diag`. Otherwise the bridge polls automatically.
+On the console, `Physical sensors` reports published temperature in hundredths
+of a degree Celsius and battery in whole percent. `trv_reconnect status` reports
+the optional sensor read separately from the position read. A missing or
+unsupported sample can leave the valve available while its sensors have no
+current value.
 
 ## 1. Identify and record the baseline
 

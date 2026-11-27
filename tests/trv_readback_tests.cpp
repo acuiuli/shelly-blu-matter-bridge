@@ -2,8 +2,10 @@
 #include "bridge/position_observation.hpp"
 #include "bridge/trv_position_write.hpp"
 #include "bridge/trv_readback.hpp"
+#include "bridge/trv_sensor_sample.hpp"
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 
 #define CHECK(expr)                                                                                          \
     do {                                                                                                     \
@@ -112,5 +114,45 @@ int main() {
     CHECK(decode_trv_readback(TrvReadField::errors, invalid, 1) == 101);
     CHECK(!decode_trv_readback(TrvReadField::errors, nullptr, 1));
     CHECK(!decode_trv_readback(TrvReadField::count, closed, 1));
-    std::cout << "TRV readback length, units, range and flag preservation checks passed\n";
+    // Synthetic BTHome v2 GATT sample: 21 C target, -0.5 C measured, 17 C external.
+    std::vector<uint8_t> frame{0x44, 0, 255, 1, 0, 0x45, 210, 0, 0x45, 0xfb, 0xff, 0x45, 170, 0, 0x54, 1, 7};
+    auto decode = [](const auto &v) { return decode_trv_sensor_sample(v.data(), v.size()); };
+    auto sensor = decode(frame);
+    CHECK(sensor && sensor->packet_id == 255 && sensor->battery_percent == 0 &&
+          sensor->measured_centi_c == -50);
+    auto damaged = frame;
+    damaged[0] |= 1; // encrypted BTHome body
+    CHECK(!decode(damaged));
+    damaged = frame;
+    damaged[4] = 101;
+    CHECK(!decode(damaged));
+    damaged = frame;
+    damaged[9] = 0xff;
+    damaged[10] = 0x7f;
+    CHECK(!decode(damaged));
+    for (size_t short_size : {0, 1, 4, 7, 8, 10, 16})
+        CHECK(!decode_trv_sensor_sample(frame.data(), short_size));
+    for (uint8_t extra : {0x00, 0x01, 0x45, 0xaa}) {
+        damaged = frame;
+        damaged.insert(damaged.end(), {extra, 0, 0});
+        CHECK(!decode(damaged));
+    }
+    damaged = frame;
+    damaged[15] = 4;
+    CHECK(!decode(damaged));
+    frame.resize(11); // no optional external temperature or status counter
+    frame[0] = 0x40;
+    frame[2] = 0;
+    frame[4] = 100;
+    frame[9] = frame[10] = 0;
+    auto zero = decode(frame);
+    CHECK(zero && zero->measured_centi_c == 0 && zero->battery_percent == 100);
+    TrvSensorObservation last;
+    CHECK(!last.fresh(200, 10));
+    last.observe(*sensor, 200);
+    last.observe(*sensor, 208); // a repeated characteristic value cannot renew freshness
+    CHECK(last.fresh(209, 10) && !last.fresh(210, 10));
+    last.observe(*zero, 212); // packet ID wraps from 255 to zero
+    CHECK(last.fresh(212, 10) && last.sample->battery_percent == 100);
+    std::cout << "TRV readback, BTHome sensor samples, freshness and flag checks passed\n";
 }

@@ -6,6 +6,7 @@
 #include <clusters/ValveConfigurationAndControl/Commands.h>
 #include <cstdio>
 #include <cstring>
+#include <data_model_provider/clusters/temperature_measurement/integration.h>
 #include <data_model_provider/esp_matter_data_model_provider.h>
 #include <esp_log.h>
 #include <esp_matter.h>
@@ -22,6 +23,8 @@ constexpr uint64_t stale_ms = poll_ms * 2 + 30000;
 struct Feed {
     std::optional<bridge::EnrollmentId> binding;
     bridge::PositionObservation sample;
+    bridge::TrvSensorObservation sensors;
+    uint64_t sensor_attempt_ms = 0;
     uint32_t completions = 0;
     int last_result = -1;
 };
@@ -32,6 +35,8 @@ struct Published {
     bridge::EnrollmentId identity{};
     bool reachable = false;
     std::optional<uint8_t> last_level;
+    std::optional<int16_t> temperature;
+    std::optional<uint8_t> battery;
     uint64_t next_poll = 0;
     uint64_t last_publish = 0;
     uint32_t blocked_commands = 0;
@@ -197,6 +202,18 @@ struct NvsCloser {
     ~NvsCloser() { nvs_close(h); }
 };
 
+bool add_physical_sensors(endpoint_t *ep) {
+    cluster::temperature_measurement::config_t temperature{};
+    cluster::power_source::config_t battery{};
+    battery.status = 1; // The enrolled TRV is battery powered.
+    battery.feature_flags = cluster::power_source::feature::battery::get_id();
+    auto *power = cluster::power_source::create(ep, &battery, CLUSTER_FLAG_SERVER);
+    return power &&
+           cluster::power_source::attribute::create_bat_percent_remaining(power, nullable<uint8_t>(), 0,
+                                                                          200) &&
+           cluster::temperature_measurement::create(ep, &temperature, CLUSTER_FLAG_SERVER);
+}
+
 esp_err_t create_endpoint(size_t slot, const bridge::EnrollmentId &id) {
     // Store the SDK-assigned endpoint id together with the physical enrollment
     // identity. A mismatched or damaged record must never alias another valve.
@@ -236,7 +253,7 @@ esp_err_t create_endpoint(size_t slot, const bridge::EnrollmentId &id) {
                  cluster::bridged_device_basic_information::attribute::create_unique_id(basic, uid, 32) &&
                  cluster::bridged_device_basic_information::attribute::create_node_label(
                      basic, label, std::strlen(label)) &&
-                 endpoint::water_valve::add(ep, &vc) == ESP_OK &&
+                 endpoint::water_valve::add(ep, &vc) == ESP_OK && add_physical_sensors(ep) &&
                  cluster::valve_configuration_and_control::feature::level::add(
                      cluster::get(ep, ValveConfigurationAndControl::Id), &level) == ESP_OK &&
                  endpoint::set_parent_endpoint(ep, endpoint::get(1)) == ESP_OK;
@@ -291,6 +308,20 @@ void observe_trv_position(size_t slot, const bridge::EnrollmentId &id, uint8_t p
     portENTER_CRITICAL(&feed_lock);
     feeds[slot].binding = id;
     feeds[slot].sample = {id, now_ms, percent};
+    portEXIT_CRITICAL(&feed_lock);
+}
+void record_trv_sensor_read(size_t slot, const bridge::EnrollmentId &id,
+                            std::optional<bridge::TrvSensorSample> sample) {
+    if (slot >= capacity)
+        return;
+    const uint64_t now = esp_timer_get_time() / 1000;
+    portENTER_CRITICAL(&feed_lock);
+    auto &feed = feeds[slot];
+    if (feed.binding == id) {
+        feed.sensor_attempt_ms = now;
+        if (sample)
+            feed.sensors.observe(*sample, now);
+    }
     portEXIT_CRITICAL(&feed_lock);
 }
 void expire_trv_position_sample(size_t slot, const bridge::EnrollmentId &id) {
@@ -359,6 +390,26 @@ esp_err_t remove_trv_endpoint(size_t slot, const bridge::EnrollmentId &id) {
     err = nvs_erase_key(nvs, key);
     return err == ESP_OK ? nvs_commit(nvs) : err;
 }
+namespace {
+void publish_sensors(Published &d, const bridge::TrvSensorSample *sample) {
+    const auto temperature = sample ? std::optional<int16_t>(sample->measured_centi_c) : std::nullopt;
+    if (temperature != d.temperature) {
+        DataModel::Nullable<int16_t> value;
+        if (temperature)
+            value.SetNonNull(*temperature);
+        if (TemperatureMeasurement::SetMeasuredValue(d.ep, value) == CHIP_NO_ERROR)
+            d.temperature = temperature;
+    }
+    const auto battery = sample ? std::optional<uint8_t>(sample->battery_percent) : std::nullopt;
+    if (battery != d.battery) {
+        auto value =
+            esp_matter_nullable_uint8(battery ? nullable<uint8_t>(*battery * 2) : nullable<uint8_t>());
+        if (attribute::update(d.ep, PowerSource::Id, PowerSource::Attributes::BatPercentRemaining::Id,
+                              &value) == ESP_OK)
+            d.battery = battery;
+    }
+}
+} // namespace
 void publish_trv_positions() {
     for (size_t i = 0; i < capacity; ++i) {
         auto &d = devices[i];
@@ -382,6 +433,7 @@ void publish_trv_positions() {
         const bool bound = feed.binding && *feed.binding == d.identity;
         const auto level = bound ? feed.sample.current(d.identity, now, stale_ms) : std::nullopt;
         server.publish_level(level);
+        publish_sensors(d, level && feed.sensors.fresh(now, stale_ms) ? &*feed.sensors.sample : nullptr);
         if (level)
             d.last_publish = feed.sample.observed_ms;
         if (level.has_value() != d.reachable) {
@@ -393,7 +445,9 @@ void publish_trv_positions() {
                     ++d.reachability_losses;
             }
         }
-        if (bound && now >= d.next_poll && (!level || now - feed.sample.observed_ms >= poll_ms)) {
+        if (bound && now >= d.next_poll &&
+            (!level || now - feed.sample.observed_ms >= poll_ms || !feed.sensor_attempt_ms ||
+             now - feed.sensor_attempt_ms >= poll_ms)) {
             d.next_poll = now + (queue_position_read(i) ? 60000 : 5000);
         }
     }
@@ -402,7 +456,7 @@ void show_trv_positions(uint64_t now) {
     for (size_t i = 0; i < capacity; ++i) {
         const auto &d = devices[i];
         const auto feed = get_feed(i);
-        if (d.ep != chip::kInvalidEndpointId)
+        if (d.ep != chip::kInvalidEndpointId) {
             std::printf("Physical TRV slot=%u endpoint=%u reachable=%u confirmed_position=%d age_ms=%lld "
                         "blocked_commands=%lu matter_completed=%lu last_result=%d reachability_losses=%lu\n",
                         unsigned(i), unsigned(d.ep), unsigned(d.reachable),
@@ -411,5 +465,12 @@ void show_trv_positions(uint64_t now) {
                         static_cast<unsigned long>(d.blocked_commands),
                         static_cast<unsigned long>(feed.completions), feed.last_result,
                         static_cast<unsigned long>(d.reachability_losses));
+            std::printf("Physical sensors slot=%u endpoint=%u", unsigned(i), unsigned(d.ep));
+            if (d.temperature)
+                std::printf(" measured_centi_c=%d", int(*d.temperature));
+            if (d.battery)
+                std::printf(" battery_percent=%u", unsigned(*d.battery));
+            std::printf("\n");
+        }
     }
 }

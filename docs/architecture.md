@@ -92,6 +92,19 @@ The NimBLE task posts a dated position sample after verifying the bonded peer an
 decoding its percentage. The Matter task updates CurrentLevel, CurrentState and
 Reachable. Polling targets five minutes. A sample expires at ten minutes and thirty
 seconds. At boot a new observation is required. A failed read cannot refresh the age.
+
+The position poll and explicit USB reconnect also read Shelly's Sample BTHome
+Data characteristic on the same encrypted connection. The bridge accepts a
+complete unencrypted-format v2 sample containing a packet ID, a valid battery
+percentage and the second temperature object (the TRV's measured temperature).
+The first temperature is the setpoint and a third is external. A repeated packet
+ID leaves the sensor timestamp unchanged. Failed reads retain the last confirmed
+sample until it expires. Attributes are null before the first sample and after
+expiry. Sensor polling continues even when frequent valve commands keep the
+position fresh. Read-only Temperature Measurement and Power Source attributes
+share the existing physical endpoint. Physical thermostat control has separate
+acceptance criteria. [Shelly TRV objects](https://shelly-api-docs.shelly.cloud/docs-ble/Devices/BLU_ZB/trv/#bthome-data) · [Shelly GATT service](https://shelly-api-docs.shelly.cloud/docs-ble/common/#common-gatt-services-and-characteristics)
+
 Each physical endpoint registers a Valve Configuration and Control server for its
 enrollment. Open and Close reserve a single bonded BLE operation and publish the
 requested target while it runs. Repeated or concurrent requests receive Busy when

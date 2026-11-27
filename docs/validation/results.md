@@ -43,6 +43,10 @@ off. A new encrypted connection confirmed the change and the 11% opening.
 After an S3 restart, the operator confirmed the new HA Matter valve showed 11%.
 [Factory-reset enrollment measurements](2026-11-27-direct-enrollment.md#first-enrollment-after-a-physical-factory-reset)
 
+The bridge then published measured temperature (20.5°C) and battery (38%)
+on that endpoint. A separate encrypted read confirmed the 20.0°C setpoint
+and disabled regulator. [Physical sensor validation](2026-11-27-physical-sensors.md)
+
 ## Original foundation validation
 
 Recorded **2026-11-10** from the foundation working tree (no release tag). These are

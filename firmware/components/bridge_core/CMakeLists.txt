@@ -1,1 +1,1 @@
-idf_component_register(SRCS "../../../core/src/bridge.cpp" "../../../core/src/shelly_discovery.cpp" "../../../core/src/trv_readback.cpp" "../../../core/src/enrollment.cpp" INCLUDE_DIRS "../../../core/include")
+idf_component_register(SRCS "../../../core/src/bridge.cpp" "../../../core/src/shelly_discovery.cpp" "../../../core/src/trv_readback.cpp" "../../../core/src/trv_sensor_sample.cpp" "../../../core/src/enrollment.cpp" INCLUDE_DIRS "../../../core/include")
