@@ -63,3 +63,10 @@ write. After this separate restore attempt, the endpoint was reachable and
 the loss counter read two. The first loss occurred during battery removal.
 The later loss is consistent with the bridge invalidating position after the
 missing write acknowledgment. A fresh read resolved the uncertain result.
+
+The operator restored the heating target through Home Assistant on the same
+physical climate entity. The bridge recorded one acknowledged write from
+4.0°C to 20.0°C and read back 20.0°C in the 4.601-second transaction. A
+separate 5.127-second bonded reconnect confirmed the original 20.0°C target,
+11% opening and functions mask 160. The radiator reported completed calibration
+and zero errors.
