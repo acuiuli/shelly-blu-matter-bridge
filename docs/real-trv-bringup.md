@@ -347,3 +347,27 @@ before using this control in an automation.
 4. Restore the starting temperature using the same HA action. Read the
    resulting target and flags again, then check them on a fresh bonded
    connection with `trv_reconnect SLOT` and `trv_reconnect status`.
+
+## 10. Check availability and recovery after a battery interruption
+
+1. Choose a radiator that can be offline for about 11 minutes. Leave the
+   bridge powered and the radiator mounted. Record the physical endpoint,
+   opening, target, regulator flags and `reachability_losses` from the last
+   successful bonded read and `diag`.
+2. Remove one AA battery from that radiator. Between automatic BLE polls,
+   read `diag` over USB. The timeout runs from the **last confirmed position**
+   and expires at 630,000 ms. A failed poll leaves the sample timestamp alone.
+   To measure automatic recovery, let the scheduled polls run throughout.
+3. When `reachable=0`, record the age of the last sample and the loss counter.
+   The console uses `confirmed_position=-1` for unknown. In HA, check that the
+   enrolled valve is unavailable. Check the physical climate and sensors too
+   if they are in use. An unavailable valve supplies no closure confirmation.
+4. Put the battery back with its original polarity. On the same endpoint,
+   watch for a successful automatic, encrypted, bonded position read and fresh
+   sensor values. Note the elapsed time and the actual opening. Check whether
+   HA recovers without a device re-interview.
+5. After automatic recovery, run `trv_reconnect SLOT` once. Compare the
+   returned target, full functions mask, position, calibration and errors
+   with the baseline. In the firmware 1.5.0 test, the radiator came back at
+   100% open with a 4.0°C target. Restore the agreed baseline explicitly
+   when needed, then confirm it on the radiator. [Observed recovery](validation/2026-11-28-battery-interruption.md)

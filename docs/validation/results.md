@@ -52,6 +52,11 @@ HA set the same radiator to 20.5°C and restored its original 20.0°C target.
 An independent bonded reconnect after each write confirmed the target, 11%
 opening and disabled regulator. [Physical thermostat test](2026-11-27-physical-thermostat.md)
 
+During a [battery interruption](2026-11-28-battery-interruption.md), HA showed
+the physical valve and climate unavailable. The bridge automatically recovered
+endpoint 11 and its bond. The radiator retained its disabled regulator but
+returned at 100% open with a 4.0°C target.
+
 ## Original foundation validation
 
 Recorded **2026-11-10** from the foundation working tree (no release tag). These are
@@ -93,10 +98,11 @@ after successful HA commissioning. The user confirmed four simulated climates,
 four valve controls and battery entities. Test-DCL trust is required on the controller
 for this development image. Mesh forwarding performance, Wi-Fi RF inactivity,
 device-type conformance and a full review of HA composition/grouping
-remain **not run**. Real-device command latency, RF
-coexistence under Thread traffic, BLE motor control, persistence through OTA,
-9.3.0 OTA import/install/rollback, all maintenance functions, TRV updates and the 14-day
-pilot remain **not run**.
+remain open. The single-radiator tests above record BLE command durations,
+position feedback and setpoint readback. Four-radiator latency and concurrency,
+RF coexistence under Thread traffic, persistence through OTA, Matter Server
+9.3.0 OTA import/install/rollback, maintenance parity, TRV updates and the
+14-day pilot still require validation.
 The [capability matrix](../matter-mapping.md) identifies unresolved standard mappings.
 
 Binary-library redistribution review remains incomplete. Current SDK source patches
