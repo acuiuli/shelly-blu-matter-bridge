@@ -69,6 +69,7 @@ struct Snapshot {
     std::optional<int> first_position, later_position;
     bool encrypted = false, bonded = false, authenticated = false;
     std::optional<int> sensor_result;
+    std::optional<int> firmware_result;
 };
 Snapshot snapshot;
 std::optional<Snapshot> last_setpoint;
@@ -87,6 +88,14 @@ ble_addr_t peer;
 ble_uuid_any_t service_uuid;
 ble_uuid_any_t sample_uuid;
 uint16_t sample_handle = 0;
+const ble_uuid16_t firmware_uuid = BLE_UUID16_INIT(0x2a26); // Firmware Revision String
+uint16_t firmware_handle = 0;
+bridge::TrvFirmwareRead firmware_read;
+struct FirmwareSchedule {
+    bridge::EnrollmentId identity{};
+    uint64_t next_ms = 0;
+};
+std::array<FirmwareSchedule, bridge::Enrollment::capacity> firmware_schedule;
 std::array<ble_uuid_any_t, field_count> characteristic_uuids;
 std::array<uint16_t, field_count> handles{};
 uint16_t connection = BLE_HS_CONN_HANDLE_NONE;
@@ -287,12 +296,68 @@ void apply_position_request() {
     snapshot.submitted = true;
     portEXIT_CRITICAL(&snapshot_lock);
 }
+void finish_firmware_read(int rc) {
+    auto &schedule = firmware_schedule[selected_slot];
+    if (!rc) {
+        observe_trv_firmware(selected_slot, schedule.identity, firmware_read.value);
+        schedule.next_ms = uint64_t(esp_timer_get_time() / 1000) + 6 * 60 * 60 * 1000;
+    }
+    portENTER_CRITICAL(&snapshot_lock);
+    snapshot.firmware_result = rc;
+    portEXIT_CRITICAL(&snapshot_lock);
+    disconnect(0); // Metadata failure does not invalidate confirmed telemetry.
+}
+int firmware_fragment(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *attr, void *) {
+    if (!active.load() || stopping || conn != connection)
+        return BLE_HS_EDONE;
+    if (error->status == BLE_HS_EDONE) {
+        finish_firmware_read(firmware_read.length && secure_peer() ? 0 : BLE_HS_EBADDATA);
+        return 0;
+    }
+    uint8_t bytes[64];
+    if (!error->status && attr && attr->handle == firmware_handle && attr->om) {
+        const size_t len = OS_MBUF_PKTLEN(attr->om);
+        if (len <= sizeof(bytes) && os_mbuf_copydata(attr->om, 0, len, bytes) == 0 &&
+            firmware_read.append(attr->offset, bytes, len))
+            return 0;
+    }
+    finish_firmware_read(error->status ? error->status : BLE_HS_EBADDATA);
+    return BLE_HS_EDONE;
+}
+int firmware_lookup(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *attr, void *) {
+    if (!active.load() || stopping || conn != connection)
+        return BLE_HS_EDONE;
+    if (!error->status && attr && !firmware_handle) {
+        firmware_handle = attr->handle;
+        return 0;
+    }
+    if (error->status == BLE_HS_EDONE && firmware_handle) {
+        // A read-by-type response can truncate the build ID. Fetch the entire characteristic.
+        if (int rc = ble_gattc_read_long(conn, firmware_handle, 0, firmware_fragment, nullptr))
+            finish_firmware_read(rc);
+    } else {
+        finish_firmware_read(error->status ? error->status : BLE_HS_EBADDATA);
+    }
+    return BLE_HS_EDONE;
+}
 void finish_sensor_read(int rc, std::optional<bridge::TrvSensorSample> sample = {}) {
     record_trv_sensor_read(selected_slot, bindings.slots[selected_slot].identity, sample);
     portENTER_CRITICAL(&snapshot_lock);
     snapshot.sensor_result = rc;
     portEXIT_CRITICAL(&snapshot_lock);
-    disconnect(0); // Optional sensors have their own result; the primary position read passed.
+    const auto &id = bindings.slots[selected_slot].identity;
+    const uint64_t now = esp_timer_get_time() / 1000;
+    auto &schedule = firmware_schedule[selected_slot];
+    if (operation != Operation::reconnect && schedule.identity == id && now < schedule.next_ms) {
+        disconnect(0);
+        return;
+    }
+    schedule = {id, now + 60 * 60 * 1000};
+    firmware_handle = 0;
+    firmware_read = {};
+    if (int err =
+            ble_gattc_read_by_uuid(connection, 1, UINT16_MAX, &firmware_uuid.u, firmware_lookup, nullptr))
+        finish_firmware_read(err);
 }
 int sample_read(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *attr, void *) {
     if (!active.load() || stopping || conn != connection)
@@ -733,6 +798,8 @@ void print_snapshot(const Snapshot &value) {
                 unsigned(value.bonded), unsigned(value.authenticated));
     if (value.sensor_result)
         std::printf("TRV sensor_read result=%d\n", *value.sensor_result);
+    if (value.firmware_result)
+        std::printf("TRV firmware_read result=%d\n", *value.firmware_result);
     if (writes_position(value.operation))
         std::printf("TRV position submitted=%u acknowledged=%u first=%d later=%d expected=%d target=%d "
                     "preflight=%d\n",

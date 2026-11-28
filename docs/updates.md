@@ -31,6 +31,12 @@ Qualify the health policy on hardware before relying on rollback.
 
 ## TRV vendor firmware
 
+The bridge reads the installed build ID from the enrolled radiator and publishes
+it as `BridgedDeviceBasicInformation.SoftwareVersionString` on the radiator's
+endpoint. Home Assistant uses this attribute for the child device's firmware field.
+The parent device's firmware field identifies the S3 application.
+[Hardware validation](validation/2026-11-28-installed-firmware.md) · [Home Assistant Matter adapter](https://github.com/home-assistant/core/blob/dev/homeassistant/components/matter/adapter.py)
+
 Gateway OTA success says nothing about TRV updates. Retain the TRV vendor firmware.
 Investigate each item independently and record evidence in the capability matrix:
 

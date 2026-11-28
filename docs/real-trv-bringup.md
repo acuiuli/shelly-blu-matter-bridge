@@ -47,6 +47,14 @@ device page, open **Device info → ⋮ → Re-interview device**. Then check th
 physical valve's **Sensors** section again. HA discovers temperature from
 Temperature Measurement's MeasuredValue. [HA sensor discovery](https://github.com/home-assistant/core/blob/dev/homeassistant/components/matter/sensor.py) · [HA Matter device interview](https://www.home-assistant.io/blog/2024/02/07/release-20242/#matter-diagnostics-and-actions)
 
+After enrollment, open the physical radiator in Home Assistant and check
+**Device info → Firmware** for its installed Shelly build. To repeat the read
+over USB, run `trv_reconnect SLOT`, wait for `trv_reconnect status` to show
+`firmware_read result=0`, then run `diag`. The `Physical firmware` line
+includes the endpoint and build ID. An existing HA installation can refresh
+the child's device information by re-interviewing the parent bridge.
+[Installed firmware test](validation/2026-11-28-installed-firmware.md)
+
 ## 1. Identify and record the baseline
 
 Record model, firmware, target, reported position, calibration/errors, automatic

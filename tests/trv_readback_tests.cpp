@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "bridge/position_observation.hpp"
+#include "bridge/trv_firmware.hpp"
 #include "bridge/trv_position_write.hpp"
 #include "bridge/trv_readback.hpp"
 #include "bridge/trv_sensor_sample.hpp"
@@ -17,6 +18,17 @@
     } while (false)
 using namespace bridge;
 int main() {
+    TrvFirmwareRead fw;
+    const uint8_t prefix[] = {'v', '1', '.'}, suffix[] = {'5', '.', '0'};
+    CHECK(fw.append(0, prefix, 3));
+    CHECK(!fw.append(0, prefix, 3) && !fw.append(4, suffix, 3));
+    const uint8_t nul[] = {0};
+    CHECK(!fw.append(3, nul, 1));
+    CHECK(fw.append(3, suffix, 3) && std::string(fw.value.data()) == "v1.5.0");
+    std::array<uint8_t, 59> tail{};
+    tail.fill('a');
+    CHECK(!fw.append(6, tail.data(), 59));
+    CHECK(fw.append(6, tail.data(), 58) && fw.value.back() == 0 && fw.length == 64);
     const TrvClimate manual{2000, 160, 500, 2900};
     const TrvClimate automatic{2000, 161, 500, 2900};
     CHECK(manual.accepts(500) && manual.accepts(2900));

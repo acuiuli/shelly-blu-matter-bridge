@@ -53,6 +53,7 @@ Simulator input bounds are protocol validation, not a heating algorithm.
 | Direct enrollment and valve-only setup | USB configuration, bonded GATT | Persistent peer reservations/bonds; explicit regulator-disable command with readback | [Factory-reset valve enrolled in an empty slot](docs/validation/2026-11-27-direct-enrollment.md#first-enrollment-after-a-physical-factory-reset). The regulator switched from on to off, the setting survived an S3 restart and HA displayed the fresh endpoint's confirmed opening |
 | Direct physical position command | USB development console | One bonded write with a fresh starting-position check and immediate and delayed readback | [USB guard tests](docs/validation/2026-11-26-matter-position.md). S3-commanded 20% read back immediately, then reverted to 0% after 12 seconds |
 | Gateway OTA | Matter OTA Requestor | Enabled; two S3 slots and boot rollback check | Installation/rollback pending |
+| Installed radiator firmware | Bridged Device Basic Information on each physical valve | Reports the build ID read over bonded BLE | [One radiator running Shelly 1.5.0](docs/validation/2026-11-28-installed-firmware.md) |
 | Maintenance and TRV updates | Standard mappings under investigation | Documentation only | Release blockers |
 
 Use an **ESP Thread BR-Zigbee GW Main Board Only**, USB-C data cables and stable 5 V

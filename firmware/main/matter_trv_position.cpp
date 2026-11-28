@@ -4,6 +4,7 @@
 #include "trv_binding_store.h"
 #include "trv_gatt_probe.h"
 #include <app/clusters/valve-configuration-and-control-server/CodegenIntegration.h>
+#include <app/reporting/reporting.h>
 #include <clusters/ValveConfigurationAndControl/Commands.h>
 #include <cstdio>
 #include <cstring>
@@ -25,6 +26,7 @@ struct Feed {
     std::optional<bridge::EnrollmentId> binding;
     bridge::PositionObservation sample;
     bridge::TrvSensorObservation sensors;
+    bridge::TrvFirmware firmware{};
     std::optional<bridge::TrvClimate> climate;
     uint64_t climate_ms = 0;
     uint64_t sensor_attempt_ms = 0;
@@ -40,6 +42,7 @@ struct Published {
     std::optional<uint8_t> last_level;
     std::optional<int16_t> temperature;
     std::optional<uint8_t> battery;
+    bridge::TrvFirmware firmware{};
     uint64_t next_poll = 0;
     uint64_t last_publish = 0;
     uint32_t blocked_commands = 0;
@@ -347,6 +350,12 @@ void observe_trv_climate(size_t slot, const bridge::EnrollmentId &id,
     }
     portEXIT_CRITICAL(&feed_lock);
 }
+void observe_trv_firmware(size_t slot, const bridge::EnrollmentId &id, const bridge::TrvFirmware &value) {
+    portENTER_CRITICAL(&feed_lock);
+    if (slot < capacity && feeds[slot].binding == id)
+        feeds[slot].firmware = value;
+    portEXIT_CRITICAL(&feed_lock);
+}
 void record_trv_sensor_read(size_t slot, const bridge::EnrollmentId &id,
                             std::optional<bridge::TrvSensorSample> sample) {
     if (slot >= capacity)
@@ -433,6 +442,25 @@ esp_err_t remove_trv_endpoint(size_t slot, const bridge::EnrollmentId &id) {
     return err == ESP_OK ? nvs_commit(nvs) : err;
 }
 namespace {
+void publish_firmware(Published &d, bridge::TrvFirmware version) {
+    if (!version[0] || version == d.firmware)
+        return;
+    namespace Info = BridgedDeviceBasicInformation;
+    const auto length = std::strlen(version.data());
+    if (!d.firmware[0]) {
+        auto *basic = cluster::get(d.ep, Info::Id);
+        if (!cluster::bridged_device_basic_information::attribute::create_software_version_string(
+                basic, version.data(), length))
+            return;
+        MatterReportingAttributeChangeCallback(d.ep, Info::Id, Info::Attributes::AttributeList::Id);
+        MatterReportingAttributeChangeCallback(d.ep, Info::Id, Info::Attributes::SoftwareVersionString::Id);
+    } else {
+        auto value = esp_matter_char_str(version.data(), length);
+        if (attribute::update(d.ep, Info::Id, Info::Attributes::SoftwareVersionString::Id, &value) != ESP_OK)
+            return;
+    }
+    d.firmware = version;
+}
 void publish_sensors(Published &d, const bridge::TrvSensorSample *sample) {
     const auto temperature = sample ? std::optional<int16_t>(sample->measured_centi_c) : std::nullopt;
     if (temperature != d.temperature) {
@@ -473,6 +501,8 @@ void publish_trv_positions() {
         auto &server = servers[i].Cluster();
         server.reconcile(feed);
         const bool bound = feed.binding && *feed.binding == d.identity;
+        if (bound)
+            publish_firmware(d, feed.firmware);
         const auto level = bound ? feed.sample.current(d.identity, now, stale_ms) : std::nullopt;
         server.publish_level(level);
         publish_sensors(d, level && feed.sensors.fresh(now, stale_ms) ? &*feed.sensors.sample : nullptr);
@@ -514,6 +544,9 @@ void show_trv_positions(uint64_t now) {
                     "Physical thermostat slot=%u endpoint=%u target_centi_c=%d regulator=%u min=%d max=%d\n",
                     unsigned(i), unsigned(d.ep), feed.climate->target, unsigned(feed.climate->functions & 1),
                     feed.climate->minimum, feed.climate->maximum);
+            if (d.firmware[0])
+                std::printf("Physical firmware slot=%u endpoint=%u build=%s\n", unsigned(i), unsigned(d.ep),
+                            d.firmware.data());
             std::printf("Physical sensors slot=%u endpoint=%u", unsigned(i), unsigned(d.ep));
             if (d.temperature)
                 std::printf(" measured_centi_c=%d", int(*d.temperature));

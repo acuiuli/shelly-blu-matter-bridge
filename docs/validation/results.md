@@ -57,6 +57,10 @@ the physical valve and climate unavailable. The bridge automatically recovered
 endpoint 11 and its bond. The radiator retained its disabled regulator but
 returned at 100% open with a 4.0°C target.
 
+The bridge read the radiator's installed 1.5.0 firmware build directly over a
+bonded BLE connection and published the complete string on the same endpoint.
+[Installed firmware test](2026-11-28-installed-firmware.md)
+
 ## Original foundation validation
 
 Recorded **2026-11-10** from the foundation working tree (no release tag). These are
